@@ -472,13 +472,14 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
     </div>
     <div id="cam-warn"></div>
     <div id="cam-flash"></div>
-    <!-- 電子黒板オーバーレイ -->
-    <div id="cam-kokuban" style="display:none;position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(6,78,59,0.82);border:2px solid #059669;border-radius:10px;padding:10px 14px;min-width:260px;max-width:70%;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <span style="color:#6ee7b7;font-size:10px;font-weight:bold;letter-spacing:.5px;">🪧 電子黒板</span>
+    <!-- 電子黒板オーバーレイ（左端デフォルト・ドラッグ移動可） -->
+    <div id="cam-kokuban" style="display:none;position:absolute;top:60px;left:8px;z-index:20;background:rgba(6,78,59,0.88);border:2px solid #059669;border-radius:10px;padding:10px 14px;min-width:220px;max-width:75vw;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);touch-action:none;user-select:none;-webkit-user-select:none;">
+      <!-- ドラッグハンドル -->
+      <div id="cam-kb-handle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;cursor:grab;">
+        <span style="color:#6ee7b7;font-size:10px;font-weight:bold;letter-spacing:.5px;">⠿ 🪧 電子黒板</span>
         <div style="display:flex;gap:6px;">
-          <button onclick="kokubanAddRow()" style="background:rgba(5,150,105,.6);color:#d1fae5;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;">＋行追加</button>
-          <button onclick="toggleKokuban()" style="background:none;border:none;color:#6ee7b7;font-size:14px;cursor:pointer;">✕</button>
+          <button onclick="kokubanAddRow()" style="background:rgba(5,150,105,.6);color:#d1fae5;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;touch-action:manipulation;">＋行追加</button>
+          <button onclick="toggleKokuban()" style="background:none;border:none;color:#6ee7b7;font-size:14px;cursor:pointer;touch-action:manipulation;">✕</button>
         </div>
       </div>
       <div id="cam-kb-rows" style="display:grid;gap:4px;"></div>
@@ -1102,7 +1103,7 @@ function camUpdateWarnBanner(){
   else{warn.classList.remove('show');}
 }
 
-// --- 撮影 ---
+// --- 撮影（電子黒板をCanvas合成） ---
 function camCapture(){
   var v=document.getElementById('cam-video');
   if(!v||!v.videoWidth){toast('カメラ未起動');return;}
@@ -1111,7 +1112,14 @@ function camCapture(){
   fl.classList.add('on');setTimeout(function(){fl.classList.remove('on');},80);
   var c=document.getElementById('cam-snap');
   c.width=v.videoWidth;c.height=v.videoHeight;
-  c.getContext('2d').drawImage(v,0,0);
+  var ctx=c.getContext('2d');
+  // ① 映像を描画
+  ctx.drawImage(v,0,0);
+  // ② 電子黒板が表示中なら合成
+  var kb=document.getElementById('cam-kokuban');
+  if(kb && kb.style.display!=='none'){
+    camDrawKokubanOnCanvas(ctx, c.width, c.height, v);
+  }
   var src=c.toDataURL('image/jpeg',0.92);
   var ts=camQTilt(CAM_TILT),bs=camQBlur(CAM_BLUR),es3=camQExp(CAM_EXP);
   var bads=[];
@@ -1122,6 +1130,82 @@ function camCapture(){
   // v11の写真帳に直接追加（v10互換フォーマット）
   addPhoto(src,'着手前','','','','');
   toast('📷 写真を追加しました（合計'+photoItems.length+'枚）','#059669');
+}
+
+// 電子黒板をCanvasに描画
+// 画面上の黒板位置・サイズをvideoとの比率で変換してCanvas座標に投影
+function camDrawKokubanOnCanvas(ctx, cw, ch, video){
+  // 入力値を最新に同期
+  kokubanSync();
+  var rows=KB_ROWS.filter(function(r){return r.label||r.value;});
+  if(!rows.length) return;
+
+  // スケール比：video解像度 / 画面表示サイズ
+  var vw=video.offsetWidth||video.clientWidth||cw;
+  var vh=video.offsetHeight||video.clientHeight||ch;
+  var scX=cw/vw, scY=ch/vh;
+
+  // 黒板のDOM位置を取得してCanvas座標に変換
+  var kb=document.getElementById('cam-kokuban');
+  var kbRect=kb.getBoundingClientRect();
+  var vRect=video.getBoundingClientRect();
+  var kbX=(kbRect.left - vRect.left)*scX;
+  var kbY=(kbRect.top  - vRect.top )*scY;
+
+  // フォントサイズ・行高さ（Canvas描画用）
+  var FS=Math.round(14*scY);
+  var LH=Math.round(FS*1.6);
+  var PAD=Math.round(10*scY);
+  var COL1=Math.round(72*scX); // ラベル幅
+  var totalH=PAD*2 + Math.round(20*scY) + rows.length*LH; // ヘッダー + 行数
+  var totalW=Math.round(230*scX);
+
+  // 背景（半透明緑）
+  ctx.save();
+  ctx.globalAlpha=0.88;
+  ctx.fillStyle='#064e3b';
+  ctx.strokeStyle='#059669';
+  ctx.lineWidth=Math.round(2*scX);
+  var r=Math.round(8*scX);
+  roundRect(ctx, kbX, kbY, totalW, totalH, r);
+  ctx.fill(); ctx.stroke();
+  ctx.globalAlpha=1.0;
+
+  // ヘッダー
+  ctx.fillStyle='#6ee7b7';
+  ctx.font='bold '+Math.round(FS*0.85)+'px Meiryo, sans-serif';
+  ctx.fillText('🪧 電子黒板', kbX+PAD, kbY+PAD+Math.round(FS*0.85));
+
+  // 区切り線
+  var sepY=kbY+PAD+Math.round(FS*1.2);
+  ctx.strokeStyle='rgba(5,150,105,0.5)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(kbX+PAD,sepY);ctx.lineTo(kbX+totalW-PAD,sepY);ctx.stroke();
+
+  // 各行
+  rows.forEach(function(row,i){
+    var y=sepY+PAD*0.5+LH*(i+0.8);
+    // ラベル
+    ctx.fillStyle='#a7f3d0';
+    ctx.font=Math.round(FS*0.85)+'px Meiryo, sans-serif';
+    ctx.fillText(row.label, kbX+PAD, y);
+    // 値
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold '+FS+'px Meiryo, sans-serif';
+    ctx.fillText(row.value||'', kbX+PAD+COL1, y);
+  });
+  ctx.restore();
+}
+
+// Canvas用角丸矩形ヘルパー
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
 }
 
 // --- 撮影アシスト ---
@@ -1251,14 +1335,65 @@ function toggleKokuban(){
   if(isOpen){
     el.style.display='none';
   } else {
-    // 初回：デフォルト項目をセット
+    // 初回：デフォルト項目をセット・ドラッグ初期化
     if(KB_ROWS.length===0){
       var defaults=['工事名','工種','撮影区分','撮影場所'];
       defaults.forEach(function(d){ KB_ROWS.push({label:d,value:''}); });
     }
     renderKokuban();
     el.style.display='block';
+    // 初回のみドラッグ登録
+    if(!el._dragInited){ initKokubanDrag(el); el._dragInited=true; }
   }
+}
+
+// 黒板ドラッグ移動（タッチ・マウス共通）
+function initKokubanDrag(el){
+  var handle=document.getElementById('cam-kb-handle');
+  if(!handle) return;
+  var startX,startY,origLeft,origTop,dragging=false;
+
+  function onStart(ex,ey){
+    dragging=true;
+    startX=ex; startY=ey;
+    // 現在位置を取得（left/top を数値で）
+    origLeft=parseInt(el.style.left)||0;
+    origTop =parseInt(el.style.top) ||0;
+    // bottomは使わずtop固定に統一
+    el.style.bottom='auto';
+    handle.style.cursor='grabbing';
+  }
+  function onMove(ex,ey){
+    if(!dragging) return;
+    var dx=ex-startX, dy=ey-startY;
+    var newLeft=origLeft+dx, newTop=origTop+dy;
+    // 画面内に収める
+    var maxL=window.innerWidth -el.offsetWidth -4;
+    var maxT=window.innerHeight-el.offsetHeight-4;
+    el.style.left=Math.max(4,Math.min(newLeft,maxL))+'px';
+    el.style.top =Math.max(4,Math.min(newTop, maxT))+'px';
+  }
+  function onEnd(){ dragging=false; handle.style.cursor='grab'; }
+
+  // タッチ
+  handle.addEventListener('touchstart',function(e){
+    // ボタンへのタッチは無視
+    if(e.target.tagName==='BUTTON') return;
+    e.preventDefault();
+    var t=e.touches[0]; onStart(t.clientX,t.clientY);
+  },{passive:false});
+  document.addEventListener('touchmove',function(e){
+    if(!dragging)return; e.preventDefault();
+    var t=e.touches[0]; onMove(t.clientX,t.clientY);
+  },{passive:false});
+  document.addEventListener('touchend',onEnd);
+  // マウス（PC確認用）
+  handle.addEventListener('mousedown',function(e){
+    if(e.target.tagName==='BUTTON') return;
+    onStart(e.clientX,e.clientY);
+  });
+  document.addEventListener('mousemove',function(e){ if(dragging) onMove(e.clientX,e.clientY); });
+  document.addEventListener('mouseup',onEnd);
 }
 function kokubanAddRow(){
   KB_ROWS.push({label:'項目名',value:''});
