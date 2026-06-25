@@ -372,7 +372,7 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
 </div>
 
 <!-- ===== カメラペイン（v11追加） ===== -->
-<div id="pane-camera" class="pane" style="padding:0;background:#000;position:relative;overflow:hidden;">
+<div id="pane-camera" class="pane" style="padding:0;background:#000;position:fixed;inset:0;overflow:hidden;z-index:500;display:none;">
 
   <!-- 縦向き警告 -->
   <div id="cam-orient-warn" style="display:none;position:absolute;inset:0;background:#1e293b;z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center;">
@@ -460,8 +460,10 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
       <div class="cam-hud-item"><div class="cam-dot" id="cam-dot-blur"></div><span class="cam-lbl">ピ</span><span class="cam-val" id="cam-val-blur">--</span></div>
       <div class="cam-hud-item"><div class="cam-dot" id="cam-dot-exp"></div><span class="cam-lbl">明</span><span class="cam-val" id="cam-val-exp">--</span></div>
     </div>
-    <div id="cam-assist-bar">
+    <div id="cam-assist-bar" style="display:flex;gap:6px;">
+      <button class="cam-assist-btn" onclick="showTab('photo')">← 戻る</button>
       <button class="cam-assist-btn" onclick="openAssist()">📋 撮影アシスト</button>
+      <button class="cam-assist-btn" id="cam-kb-toggle" onclick="toggleKokuban()">🪧 黒板</button>
     </div>
     <div class="cam-right">
       <button class="cam-side-btn" onclick="openAssist()" title="撮影アシスト">📋</button>
@@ -470,6 +472,17 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
     </div>
     <div id="cam-warn"></div>
     <div id="cam-flash"></div>
+    <!-- 電子黒板オーバーレイ -->
+    <div id="cam-kokuban" style="display:none;position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(6,78,59,0.82);border:2px solid #059669;border-radius:10px;padding:10px 14px;min-width:260px;max-width:70%;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <span style="color:#6ee7b7;font-size:10px;font-weight:bold;letter-spacing:.5px;">🪧 電子黒板</span>
+        <div style="display:flex;gap:6px;">
+          <button onclick="kokubanAddRow()" style="background:rgba(5,150,105,.6);color:#d1fae5;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;">＋行追加</button>
+          <button onclick="toggleKokuban()" style="background:none;border:none;color:#6ee7b7;font-size:14px;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <div id="cam-kb-rows" style="display:grid;gap:4px;"></div>
+    </div>
   </div>
 </div>
 
@@ -531,9 +544,24 @@ var saveTimer=null;
 var KUBUN=['着手前','施工中','完成','安全管理','現況','その他'];
 
 function showTab(n){
-  document.querySelectorAll('.pane').forEach(function(p){p.classList.remove('active');});
+  // カメラタブ：fixed配置なのでdisplay切替で制御
+  var camPane = document.getElementById('pane-camera');
+  if(n==='camera'){
+    // 他ペインは通常表示のまま、カメラを前面に出す
+    camPane.style.display='block';
+    // ヘッダー・タブバー・案件バーを隠す（カメラ中は不要）
+    document.querySelector('header').style.display='none';
+    document.querySelector('.tab-bar').style.display='none';
+    document.getElementById('case-label-bar').style.display='none';
+  } else {
+    camPane.style.display='none';
+    document.querySelector('header').style.display='';
+    document.querySelector('.tab-bar').style.display='';
+    document.getElementById('case-label-bar').style.display='';
+    document.querySelectorAll('.pane').forEach(function(p){p.classList.remove('active');});
+    document.getElementById('pane-'+n).classList.add('active');
+  }
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('on');});
-  document.getElementById('pane-'+n).classList.add('active');
   document.getElementById('tab-'+n).classList.add('on');
   if(n==='preview') buildPreview();
 }
@@ -955,8 +983,17 @@ function camSwitch(){if(CAM_STREAM)CAM_STREAM.getTracks().forEach(function(t){t.
 // --- 横向きチェック ---
 function camCheckOrient(){
   var warn=document.getElementById('cam-orient-warn');
-  var isPort=window.innerHeight>window.innerWidth;
-  if(warn) warn.style.display=isPort?'flex':'none';
+  if(!warn) return;
+  // screen.orientation.type が最も確実。なければwindow.orientationで判定
+  var isPort;
+  if(screen.orientation && screen.orientation.type){
+    isPort = screen.orientation.type.indexOf('portrait') >= 0;
+  } else if(typeof window.orientation !== 'undefined'){
+    isPort = (window.orientation === 0 || window.orientation === 180);
+  } else {
+    isPort = window.innerHeight > window.innerWidth;
+  }
+  warn.style.display = isPort ? 'flex' : 'none';
 }
 
 // --- 傾きセンサー（iOS横向き対応：betaを使う）---
@@ -972,39 +1009,53 @@ function camRequestTilt(){
   }
 }
 function camOnTilt(e){
-  if(e.beta===null) return;
-  // 横向き持ちでは beta が水平面からのズレを示す（水平=0°付近）
-  // screen.orientation.angle で端末の回転方向を取得し符号を補正
-  var angle=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
-  var tilt;
-  if(angle===90||angle===-270){
-    // 左回転（ホームボタン右）
-    tilt = e.beta;
-  } else if(angle===-90||angle===270){
-    // 右回転（ホームボタン左）
-    tilt = -e.beta;
-  } else {
-    // 縦向き（本来は警告表示中だがフォールバック）
-    tilt = e.gamma;
+  // iOSのDeviceOrientation軸：
+  //   縦持ち: beta=前後傾き(-180〜180)、gamma=左右傾き(-90〜90)
+  //   横持ち(右): beta=左右傾き、gamma=-90付近
+  //   横持ち(左): beta=左右傾き、gamma=+90付近
+  // → 横向き時の「水平からのズレ」は beta で取れる
+  //   ただし端末向きによって正負が逆になる
+  var angle = 0;
+  if(screen.orientation && typeof screen.orientation.angle === 'number'){
+    angle = screen.orientation.angle;
+  } else if(typeof window.orientation === 'number'){
+    angle = window.orientation;
   }
-  CAM_TILT=Math.round(tilt*10)/10;
-  camUpdateTiltUI();
+  var b = (e.beta  !== null) ? e.beta  : 0;
+  var g = (e.gamma !== null) ? e.gamma : 0;
+  var tilt;
+  // angle=90:  右に回転（ホームボタン右）→ betaがそのまま水平傾き
+  // angle=-90(270): 左に回転（ホームボタン左）→ betaが逆符号
+  // angle=0: 縦持ち → gammaが左右傾き（警告中だがフォールバック）
+  if(angle === 90 || angle === -270){
+    tilt = b;
+  } else if(angle === -90 || angle === 270){
+    tilt = -b;
+  } else {
+    // 縦向きフォールバック
+    tilt = g;
+  }
+  CAM_TILT = Math.round(tilt * 10) / 10;
+  // デバッグ用：生値をHUDの傾き欄に表示（angle|b|g|→tilt）
+  var dbgEl = document.getElementById('cam-val-tilt');
+  if(dbgEl) dbgEl.textContent = CAM_TILT.toFixed(1) + '° [' + angle + ']';
+  camUpdateTiltBarOnly();
 }
-function camUpdateTiltUI(){
-  var bar=document.getElementById('cam-level-bar');
-  var dot=document.getElementById('cam-dot-tilt');
-  var val=document.getElementById('cam-val-tilt');
-  if(!bar)return;
-  var abs=Math.abs(CAM_TILT);
-  bar.style.transform='rotate('+CAM_TILT+'deg)';
-  val.textContent=CAM_TILT.toFixed(1)+'°';
+function camUpdateTiltBarOnly(){
+  // バーとドットのみ更新（val更新はcamOnTiltで実施済み）
+  var bar = document.getElementById('cam-level-bar');
+  var dot = document.getElementById('cam-dot-tilt');
+  if(!bar) return;
+  var abs = Math.abs(CAM_TILT);
+  bar.style.transform = 'rotate(' + CAM_TILT + 'deg)';
   bar.classList.remove('locked');
   dot.classList.remove('warn','bad');
-  if(abs<=1.5){bar.classList.add('locked');}       // 緑：水平確定
-  else if(abs<=5){dot.classList.add('warn');}       // 黄：注意
-  else{dot.classList.add('bad');}                   // 赤：NG
+  if(abs <= 1.5){ bar.classList.add('locked'); }
+  else if(abs <= 5){ dot.classList.add('warn'); }
+  else { dot.classList.add('bad'); }
   camUpdateWarnBanner();
 }
+/* camUpdateTiltUI → camOnTilt + camUpdateTiltBarOnly に統合 */
 
 // --- 画像解析（ピンボケ・明るさ）---
 function camStartAnalyze(){if(CAM_TIMER)clearInterval(CAM_TIMER);CAM_TIMER=setInterval(camAnalyze,400);}
@@ -1186,14 +1237,60 @@ function toggleAssistCheck(key,i,el){
   el.closest('.assist-check').classList.toggle('done',el.checked);
 }
 
-// カメラタブ離脱時にストリームを一時停止（バッテリー節約）
-var _origShowTab=showTab;
-showTab=function(n){
-  _origShowTab(n);
-  if(n!=='camera'&&CAM_STREAM){
-    // 写真タブに戻っても映像は維持（ストップしない）
+// ★ showTabの上書きはv11修正で新showTab関数に統合済み
+
+// ============================================================
+// ★ v11.1: 電子黒板オーバーレイ
+// ============================================================
+var KB_ROWS=[]; // {label:'工事名',value:''}の配列
+
+function toggleKokuban(){
+  var el=document.getElementById('cam-kokuban');
+  if(!el) return;
+  var isOpen = el.style.display !== 'none';
+  if(isOpen){
+    el.style.display='none';
+  } else {
+    // 初回：デフォルト項目をセット
+    if(KB_ROWS.length===0){
+      var defaults=['工事名','工種','撮影区分','撮影場所'];
+      defaults.forEach(function(d){ KB_ROWS.push({label:d,value:''}); });
+    }
+    renderKokuban();
+    el.style.display='block';
   }
-};
+}
+function kokubanAddRow(){
+  KB_ROWS.push({label:'項目名',value:''});
+  renderKokuban();
+}
+function kokubanDelRow(i){
+  KB_ROWS.splice(i,1);
+  renderKokuban();
+}
+function kokubanSync(){
+  // inputの現在値をKB_ROWSに同期
+  document.querySelectorAll('.kb-row').forEach(function(row,i){
+    if(!KB_ROWS[i]) return;
+    var lbl=row.querySelector('.kb-lbl');
+    var val=row.querySelector('.kb-val');
+    if(lbl) KB_ROWS[i].label=lbl.value;
+    if(val) KB_ROWS[i].value=val.value;
+  });
+}
+function renderKokuban(){
+  kokubanSync();
+  var cont=document.getElementById('cam-kb-rows');
+  if(!cont) return;
+  cont.innerHTML=KB_ROWS.map(function(r,i){
+    return '<div class="kb-row" style="display:grid;grid-template-columns:auto 1fr auto;gap:4px;align-items:center;">'
+      +'<input class="kb-lbl" value="'+es(r.label)+'" style="width:70px;background:rgba(0,0,0,.3);border:1px solid rgba(5,150,105,.5);border-radius:4px;color:#d1fae5;font-size:11px;padding:2px 5px;font-family:inherit;">'
+      +'<input class="kb-val" placeholder="入力" value="'+es(r.value)+'" style="background:rgba(0,0,0,.3);border:1px solid rgba(5,150,105,.5);border-radius:4px;color:#fff;font-size:11px;padding:2px 5px;font-family:inherit;">'
+      +'<button onclick="kokubanSync();kokubanDelRow('+i+')" style="background:none;border:none;color:#6ee7b7;font-size:13px;cursor:pointer;padding:0 2px;">✕</button>'
+      +'</div>';
+  }).join('');
+}
+
 
 // ============================================================
 // 起動：最新の案件を自動復元
