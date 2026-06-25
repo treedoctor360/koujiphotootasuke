@@ -2,180 +2,317 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>工事写真カメラPoC v0.1</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="工事写真カメラ">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>工事写真カメラ</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-body{font-family:"Meiryo","Hiragino Sans",sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;overflow:hidden;height:100vh;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;}
+html,body{height:100%;width:100%;overflow:hidden;background:#000;color:#fff;font-family:-apple-system,"Hiragino Sans","Helvetica Neue",sans-serif;font-size:14px;}
 
-/* ヘッダー */
-header{background:#1e293b;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;}
-header h1{font-size:13px;font-weight:bold;}
-header .ver{font-size:10px;color:#94a3b8;}
+/* ===== 縦向き警告（横向きを促す） ===== */
+#orient-warn{
+  position:fixed;inset:0;background:#000;z-index:9000;
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  padding:40px;text-align:center;
+}
+.orient-icon{font-size:64px;animation:rot 2s ease-in-out infinite;}
+@keyframes rot{0%,100%{transform:rotate(0deg);}50%{transform:rotate(-90deg);}}
+#orient-warn h2{font-size:18px;font-weight:600;}
+#orient-warn p{font-size:13px;color:#9ca3af;line-height:1.6;}
+/* 縦向きで警告表示・横向きで撮影画面 */
+@media (orientation:portrait){
+  #orient-warn{display:flex;}
+  #app{display:none;}
+}
+@media (orientation:landscape){
+  #orient-warn{display:none;}
+  #app{display:block;}
+}
 
-/* タブ切替 */
-.tabs{display:flex;background:#1e293b;border-bottom:1px solid #334155;}
-.tab-btn{flex:1;padding:8px;background:none;border:none;color:#94a3b8;font-family:inherit;font-size:12px;font-weight:bold;cursor:pointer;}
-.tab-btn.on{color:#fff;background:#334155;border-bottom:2px solid #2563eb;}
+/* ===== アプリ本体 ===== */
+#app{position:fixed;inset:0;background:#000;}
 
-.pane{display:none;}
-.pane.active{display:block;}
-
-/* ===== 撮影画面 ===== */
-#pane-cam{position:relative;height:calc(100vh - 70px);background:#000;overflow:hidden;}
-#video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+#video{
+  position:absolute;inset:0;
+  width:100%;height:100%;object-fit:cover;
+  background:#000;
+}
 #cv-snap{display:none;}
 
-/* ガイドオーバーレイ */
-.overlay{position:absolute;inset:0;pointer-events:none;}
-/* 中央構図ガイド（三分割法） */
-.rule-grid{position:absolute;inset:6%;border:1px solid rgba(255,255,255,0.25);}
-.rule-grid::before,.rule-grid::after{content:'';position:absolute;background:rgba(255,255,255,0.18);}
-.rule-grid::before{left:33.3%;right:33.3%;top:0;bottom:0;border-left:1px solid rgba(255,255,255,0.18);border-right:1px solid rgba(255,255,255,0.18);}
-.rule-grid::after{top:33.3%;bottom:33.3%;left:0;right:0;border-top:1px solid rgba(255,255,255,0.18);border-bottom:1px solid rgba(255,255,255,0.18);}
+/* ===== カメラ未起動オーバーレイ ===== */
+.start-screen{
+  position:absolute;inset:0;
+  background:#000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  padding:30px;
+}
+.start-screen.hidden{display:none;}
+.start-screen h1{font-size:22px;font-weight:600;letter-spacing:1px;}
+.start-screen .sub{font-size:12px;color:#9ca3af;letter-spacing:0.5px;}
+.btn-start{
+  margin-top:10px;padding:14px 40px;
+  background:#fff;color:#000;border:none;border-radius:30px;
+  font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  box-shadow:0 4px 16px rgba(255,255,255,0.15);
+}
+.btn-start:active{transform:scale(0.96);}
+.start-note{font-size:10px;color:#525252;margin-top:8px;}
 
-/* 水準器 */
-.level{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60%;max-width:300px;height:2px;background:rgba(255,255,255,0.3);pointer-events:none;}
-.level-bar{position:absolute;left:0;top:50%;width:100%;height:3px;background:#10b981;transform-origin:center;transform:translateY(-50%) rotate(0deg);transition:background 0.15s;}
-.level-bar.warn{background:#f59e0b;}
-.level-bar.bad{background:#ef4444;}
-.level-bar::before,.level-bar::after{content:'';position:absolute;top:50%;width:8px;height:8px;border-radius:50%;background:inherit;transform:translateY(-50%);}
-.level-bar::before{left:-4px;}
-.level-bar::after{right:-4px;}
-
-/* 中央マーカー */
-.center-mark{position:absolute;left:50%;top:50%;width:24px;height:24px;transform:translate(-50%,-50%);pointer-events:none;}
-.center-mark::before,.center-mark::after{content:'';position:absolute;background:rgba(255,255,255,0.6);}
-.center-mark::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-50%);}
-.center-mark::after{top:50%;left:0;right:0;height:1px;transform:translateY(-50%);}
-
-/* HUD（情報表示） */
-.hud{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;}
-.hud-item{background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-radius:6px;padding:6px 10px;font-size:11px;display:flex;align-items:center;gap:6px;}
-.hud-item .dot{width:8px;height:8px;border-radius:50%;background:#10b981;}
+/* ===== HUD（上部・中央寄せの小さなインジケーター） ===== */
+.hud{
+  position:absolute;top:env(safe-area-inset-top,12px);left:50%;transform:translateX(-50%);
+  display:flex;gap:6px;
+  padding:6px 8px;
+  background:rgba(0,0,0,0.4);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-radius:20px;
+  z-index:10;
+  font-size:11px;
+}
+.hud-item{
+  display:flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:14px;
+}
+.hud-item .dot{width:6px;height:6px;border-radius:50%;background:#10b981;transition:background 0.2s;}
 .hud-item .dot.warn{background:#f59e0b;}
 .hud-item .dot.bad{background:#ef4444;}
-.hud-item .lbl{color:#94a3b8;font-size:10px;}
-.hud-item .val{font-weight:bold;color:#fff;}
+.hud-item .lbl{color:#d4d4d8;font-size:10px;letter-spacing:0.3px;}
+.hud-item .val{color:#fff;font-weight:600;font-variant-numeric:tabular-nums;}
 
-/* 警告バナー */
-.warn-banner{position:absolute;bottom:90px;left:10px;right:10px;background:rgba(239,68,68,0.9);color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;text-align:center;font-weight:bold;display:none;}
+/* ===== 構図ガイド（iPhoneカメラ風グリッド） ===== */
+.grid-overlay{position:absolute;inset:0;pointer-events:none;}
+.grid-overlay .gline{position:absolute;background:rgba(255,255,255,0.3);}
+.grid-overlay .gline.v1{left:33.33%;top:0;bottom:0;width:0.5px;}
+.grid-overlay .gline.v2{left:66.66%;top:0;bottom:0;width:0.5px;}
+.grid-overlay .gline.h1{top:33.33%;left:0;right:0;height:0.5px;}
+.grid-overlay .gline.h2{top:66.66%;left:0;right:0;height:0.5px;}
+
+/* ===== 水準器（中央水平線） ===== */
+.level{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:160px;height:30px;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.level-center{
+  position:absolute;width:24px;height:1px;background:rgba(255,255,255,0.5);
+}
+.level-bar{
+  width:120px;height:2px;background:#fbbf24;
+  border-radius:1px;transform-origin:center;
+  transition:background 0.15s;
+  box-shadow:0 0 8px rgba(251,191,36,0.4);
+}
+.level-bar.ok{background:#fbbf24;}  /* デフォルト＝黄色（iPhone風） */
+.level-bar.locked{background:#fbbf24;height:1px;width:200px;}  /* 水平になったら細く長く */
+.level-bar.bad{background:#fbbf24;}
+
+/* ===== 右側操作エリア（横向き時の親指側） ===== */
+.right-panel{
+  position:absolute;right:env(safe-area-inset-right,0);top:0;bottom:0;
+  width:110px;
+  background:linear-gradient(to left,rgba(0,0,0,0.5),transparent);
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  padding:20px 0;
+  z-index:10;
+}
+
+/* ギャラリーへの小窓（左上） */
+.gallery-thumb{
+  width:46px;height:46px;border-radius:8px;
+  background:#1f2937;border:1px solid rgba(255,255,255,0.3);
+  overflow:hidden;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:#6b7280;font-size:18px;position:relative;
+}
+.gallery-thumb img{width:100%;height:100%;object-fit:cover;}
+.gallery-thumb .badge{
+  position:absolute;top:-4px;right:-4px;
+  background:#ef4444;color:#fff;font-size:9px;font-weight:bold;
+  border-radius:10px;padding:1px 5px;min-width:18px;text-align:center;
+}
+
+/* シャッター */
+.shutter{
+  width:72px;height:72px;border-radius:50%;
+  background:transparent;border:4px solid #fff;
+  cursor:pointer;position:relative;
+  display:flex;align-items:center;justify-content:center;
+}
+.shutter::before{
+  content:'';width:58px;height:58px;border-radius:50%;background:#fff;
+  transition:transform 0.1s, background 0.15s;
+}
+.shutter:active::before{transform:scale(0.88);}
+.shutter.flash::before{background:#ef4444;}
+
+/* カメラ切替 */
+.switch-btn{
+  width:42px;height:42px;border-radius:50%;
+  background:rgba(60,60,60,0.7);border:none;color:#fff;
+  font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.switch-btn:active{transform:scale(0.92);}
+
+/* ===== 警告バナー（下部中央） ===== */
+.warn-banner{
+  position:absolute;bottom:env(safe-area-inset-bottom,16px);left:50%;transform:translateX(-50%);
+  background:rgba(239,68,68,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:#fff;padding:6px 14px;border-radius:16px;
+  font-size:11px;font-weight:500;letter-spacing:0.3px;
+  display:none;max-width:60%;text-align:center;z-index:10;
+}
 .warn-banner.show{display:block;}
-.warn-banner.amber{background:rgba(245,158,11,0.9);}
+.warn-banner.amber{background:rgba(245,158,11,0.85);}
 
-/* シャッターエリア */
-.shutter-area{position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to top,rgba(0,0,0,0.7),transparent);display:flex;align-items:center;justify-content:space-between;padding:0 20px;}
-.shutter-btn{width:64px;height:64px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,0.4);cursor:pointer;flex-shrink:0;}
-.shutter-btn:active{transform:scale(0.92);}
-.shutter-btn.disabled{background:#64748b;cursor:not-allowed;}
-.side-btn{width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-.side-btn .cnt{position:absolute;background:#2563eb;color:#fff;font-size:10px;font-weight:bold;border-radius:10px;padding:1px 5px;transform:translate(14px,-14px);}
+/* ===== 撮影フラッシュ ===== */
+.shot-flash{
+  position:absolute;inset:0;background:#fff;
+  opacity:0;pointer-events:none;z-index:100;
+  transition:opacity 0.08s;
+}
+.shot-flash.active{opacity:0.9;transition:opacity 0.02s;}
 
-/* カメラ未起動時 */
-.cam-init{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;}
-.cam-init.hidden{display:none;}
-.cam-init h2{font-size:16px;}
-.cam-init p{font-size:12px;color:#94a3b8;line-height:1.6;}
-.btn-start{padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:bold;cursor:pointer;}
-
-/* ===== ギャラリー ===== */
-#pane-gallery{height:calc(100vh - 70px);overflow-y:auto;padding:10px;background:#0f172a;}
-.gallery-empty{text-align:center;padding:40px 20px;color:#64748b;font-size:13px;}
-.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
-.gcard{background:#1e293b;border-radius:6px;overflow:hidden;border:1px solid #334155;}
-.gcard-img{width:100%;height:120px;object-fit:cover;background:#000;cursor:pointer;display:block;}
-.gcard-body{padding:6px 8px;font-size:10px;}
-.gcard-meta{color:#94a3b8;margin-bottom:4px;}
-.gcard-q{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;}
-.qchip{padding:1px 5px;border-radius:4px;font-size:9px;font-weight:bold;}
-.qchip.ok{background:#065f46;color:#d1fae5;}
-.qchip.warn{background:#92400e;color:#fef3c7;}
-.qchip.bad{background:#991b1b;color:#fee2e2;}
-.gcard-btns{display:flex;gap:4px;}
-.gbtn{flex:1;padding:4px;background:#334155;color:#e2e8f0;border:none;border-radius:4px;font-family:inherit;font-size:10px;cursor:pointer;}
+/* ===== ギャラリービュー（フルスクリーン） ===== */
+#gallery-view{
+  position:absolute;inset:0;background:#000;z-index:50;
+  display:none;flex-direction:column;
+}
+#gallery-view.open{display:flex;}
+.gv-head{
+  padding:env(safe-area-inset-top,12px) env(safe-area-inset-right,16px) 12px env(safe-area-inset-left,16px);
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid #1f2937;
+}
+.gv-head h2{font-size:15px;font-weight:600;}
+.gv-close{
+  background:none;border:none;color:#fff;font-size:22px;cursor:pointer;
+  padding:6px 10px;
+}
+.gv-body{
+  flex:1;overflow-y:auto;
+  padding:12px env(safe-area-inset-right,12px) 12px env(safe-area-inset-left,12px);
+  -webkit-overflow-scrolling:touch;
+}
+.gv-empty{text-align:center;padding:40px 20px;color:#6b7280;font-size:12px;}
+.gv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;}
+.gv-card{background:#111827;border-radius:10px;overflow:hidden;border:1px solid #1f2937;}
+.gv-card-img{width:100%;height:110px;object-fit:cover;display:block;cursor:pointer;background:#000;}
+.gv-card-body{padding:6px 8px;font-size:10px;}
+.gv-card-meta{color:#9ca3af;margin-bottom:4px;font-size:9px;}
+.gv-q{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px;}
+.qchip{padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;}
+.qchip.ok{background:rgba(16,185,129,0.2);color:#6ee7b7;}
+.qchip.warn{background:rgba(245,158,11,0.2);color:#fcd34d;}
+.qchip.bad{background:rgba(239,68,68,0.2);color:#fca5a5;}
+.gv-btns{display:flex;gap:4px;}
+.gbtn{flex:1;padding:5px 0;background:#1f2937;color:#e5e7eb;border:none;border-radius:5px;font-family:inherit;font-size:10px;font-weight:500;cursor:pointer;}
 .gbtn.dl{background:#2563eb;}
-.gbtn.del{background:#991b1b;}
+.gbtn.del{background:#7f1d1d;}
 
 /* ライトボックス */
-.lb{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9000;display:none;align-items:center;justify-content:center;}
+.lb{position:fixed;inset:0;background:#000;z-index:9500;display:none;align-items:center;justify-content:center;}
 .lb.open{display:flex;}
-.lb img{max-width:96vw;max-height:96vh;object-fit:contain;}
-.lb-close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,0.2);color:#fff;border:none;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;}
+.lb img{max-width:100vw;max-height:100vh;object-fit:contain;}
+.lb-close{position:absolute;top:env(safe-area-inset-top,16px);right:env(safe-area-inset-right,16px);background:rgba(255,255,255,0.15);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:#fff;border:none;width:38px;height:38px;border-radius:50%;font-size:18px;cursor:pointer;}
 
 /* トースト */
-#toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:8px 18px;border-radius:18px;font-size:12px;z-index:9999;display:none;border:1px solid #334155;box-shadow:0 4px 12px rgba(0,0,0,0.4);}
-#toast.show{display:block;animation:tf 2.4s forwards;}
-@keyframes tf{0%{opacity:1;}70%{opacity:1;}100%{opacity:0;}}
-
-footer{padding:6px;text-align:center;font-size:9px;color:#475569;}
+#toast{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(0,0,0,0.75);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;z-index:9999;
+  display:none;
+}
+#toast.show{display:block;animation:tf 1.8s forwards;}
+@keyframes tf{0%{opacity:0;}15%,80%{opacity:1;}100%{opacity:0;}}
 </style>
 </head>
 <body>
 
 <div id="toast"></div>
 
-<header>
-  <h1>📷 工事写真カメラPoC</h1>
-  <span class="ver">v0.1 / オンデバイス判定</span>
-</header>
-
-<div class="tabs">
-  <button class="tab-btn on" id="tab-cam" onclick="showTab('cam')">📷 撮影</button>
-  <button class="tab-btn" id="tab-gallery" onclick="showTab('gallery')">🖼️ ギャラリー <span id="gcnt">0</span></button>
+<!-- 縦持ち時の警告 -->
+<div id="orient-warn">
+  <div class="orient-icon">📱</div>
+  <h2>横向きにしてください</h2>
+  <p>工事写真は横向きで撮影します。<br>端末を横に回転してください。</p>
 </div>
 
-<!-- ===== 撮影 ===== -->
-<div id="pane-cam" class="pane active">
+<!-- アプリ本体（横向きのみ表示） -->
+<div id="app">
   <video id="video" autoplay playsinline muted></video>
   <canvas id="cv-snap"></canvas>
 
-  <div class="overlay" id="overlay" style="display:none;">
-    <div class="rule-grid"></div>
-    <div class="center-mark"></div>
-    <div class="level"><div class="level-bar" id="level-bar"></div></div>
+  <!-- 起動前画面 -->
+  <div class="start-screen" id="start-screen">
+    <h1>📷 工事写真カメラ</h1>
+    <div class="sub">v0.2 / 撮影品質リアルタイム判定</div>
+    <button class="btn-start" onclick="startCamera()">カメラを起動</button>
+    <div class="start-note">カメラへのアクセス許可が必要です</div>
+  </div>
+
+  <!-- 撮影中UI（起動後表示） -->
+  <div id="cam-ui" style="display:none;">
+    <div class="grid-overlay">
+      <div class="gline v1"></div><div class="gline v2"></div>
+      <div class="gline h1"></div><div class="gline h2"></div>
+    </div>
+
+    <div class="level">
+      <div class="level-center" style="left:calc(50% - 80px);"></div>
+      <div class="level-center" style="right:calc(50% - 80px);"></div>
+      <div class="level-bar" id="level-bar"></div>
+    </div>
 
     <div class="hud">
-      <div class="hud-item"><div class="dot" id="dot-tilt"></div><div><div class="lbl">傾き</div><div class="val" id="val-tilt">0°</div></div></div>
-      <div class="hud-item"><div class="dot" id="dot-blur"></div><div><div class="lbl">ピント</div><div class="val" id="val-blur">--</div></div></div>
-      <div class="hud-item"><div class="dot" id="dot-exp"></div><div><div class="lbl">明るさ</div><div class="val" id="val-exp">--</div></div></div>
+      <div class="hud-item"><div class="dot" id="dot-tilt"></div><span class="lbl">傾</span><span class="val" id="val-tilt">0°</span></div>
+      <div class="hud-item"><div class="dot" id="dot-blur"></div><span class="lbl">ピ</span><span class="val" id="val-blur">--</span></div>
+      <div class="hud-item"><div class="dot" id="dot-exp"></div><span class="lbl">明</span><span class="val" id="val-exp">--</span></div>
     </div>
 
     <div class="warn-banner" id="warn"></div>
 
-    <div class="shutter-area">
-      <button class="side-btn" onclick="showTab('gallery')" style="position:relative;">🖼️<span class="cnt" id="cnt-badge" style="display:none;">0</span></button>
-      <button class="shutter-btn" id="shutter" onclick="capture()"></button>
-      <button class="side-btn" onclick="switchCamera()">🔄</button>
+    <div class="right-panel">
+      <div class="gallery-thumb" id="gthumb" onclick="openGallery()">
+        <span id="gthumb-icon">🖼️</span>
+        <span class="badge" id="gthumb-badge" style="display:none;">0</span>
+      </div>
+      <button class="shutter" id="shutter" onclick="capture()"></button>
+      <button class="switch-btn" onclick="switchCamera()">🔄</button>
+    </div>
+
+    <div class="shot-flash" id="shot-flash"></div>
+  </div>
+
+  <!-- ギャラリービュー -->
+  <div id="gallery-view">
+    <div class="gv-head">
+      <h2>ギャラリー</h2>
+      <button class="gv-close" onclick="closeGallery()">✕</button>
+    </div>
+    <div class="gv-body">
+      <div class="gv-empty" id="gv-empty">まだ撮影された写真はありません</div>
+      <div class="gv-grid" id="gv-grid"></div>
     </div>
   </div>
 
-  <div class="cam-init" id="cam-init">
-    <h2>📷 工事写真カメラPoC</h2>
-    <p>背面カメラを起動して、撮影品質をリアルタイム判定します。<br>
-    （傾き・ピント・明るさ）</p>
-    <button class="btn-start" onclick="startCamera()">📷 カメラを起動</button>
-    <p style="font-size:10px;color:#475569;margin-top:8px;">※ カメラへのアクセス許可が必要です</p>
+  <!-- ライトボックス -->
+  <div class="lb" id="lb" onclick="closeLB()">
+    <button class="lb-close" onclick="event.stopPropagation();closeLB()">✕</button>
+    <img id="lb-img" src="" alt="">
   </div>
 </div>
-
-<!-- ===== ギャラリー ===== -->
-<div id="pane-gallery" class="pane">
-  <div class="gallery-empty" id="gallery-empty">まだ撮影された写真はありません</div>
-  <div class="gallery-grid" id="gallery-grid"></div>
-</div>
-
-<div class="lb" id="lb" onclick="closeLB()">
-  <button class="lb-close" onclick="event.stopPropagation();closeLB()">✕</button>
-  <img id="lb-img" src="" alt="">
-</div>
-
-<footer>© 2026 Koh Kitsukawa / PoC v0.1</footer>
 
 <script>
 'use strict';
 
 // ============================================================
-// IndexedDB（v10と互換設計、ストア名のみ別）
+// IndexedDB
 // ============================================================
 var DB_NAME='KoujiCameraPocV01', DB_VER=1;
 var ST_PHOTOS='photos';
@@ -190,215 +327,131 @@ function openDB(cb){
   req.onsuccess=function(e){db=e.target.result;cb&&cb();};
   req.onerror=function(){alert('IndexedDBが使えません');};
 }
-function dbPut(rec,cb){ var tx=db.transaction(ST_PHOTOS,'readwrite');tx.objectStore(ST_PHOTOS).put(rec);tx.oncomplete=function(){cb&&cb();}; }
-function dbAll(cb){ var out=[]; var req=db.transaction(ST_PHOTOS,'readonly').objectStore(ST_PHOTOS).openCursor(); req.onsuccess=function(e){var c=e.target.result;if(c){out.push(c.value);c.continue();}else cb&&cb(out);};}
-function dbDel(id,cb){ var tx=db.transaction(ST_PHOTOS,'readwrite');tx.objectStore(ST_PHOTOS).delete(id);tx.oncomplete=function(){cb&&cb();}; }
+function dbPut(rec,cb){var tx=db.transaction(ST_PHOTOS,'readwrite');tx.objectStore(ST_PHOTOS).put(rec);tx.oncomplete=function(){cb&&cb();};}
+function dbAll(cb){var out=[];var req=db.transaction(ST_PHOTOS,'readonly').objectStore(ST_PHOTOS).openCursor();req.onsuccess=function(e){var c=e.target.result;if(c){out.push(c.value);c.continue();}else cb&&cb(out);};}
+function dbDel(id,cb){var tx=db.transaction(ST_PHOTOS,'readwrite');tx.objectStore(ST_PHOTOS).delete(id);tx.oncomplete=function(){cb&&cb();};}
 
 // ============================================================
 // 状態
 // ============================================================
-var stream=null;
-var facingMode='environment'; // 'environment'=背面 / 'user'=前面
-var currentTilt=0;
-var currentBlur=0;
-var currentExp=128;
+var stream=null, facingMode='environment';
+var currentTilt=0, currentBlur=0, currentExp=128;
 var analyzeTimer=null;
 var photos=[];
 
-// ============================================================
-// タブ切替
-// ============================================================
-function showTab(n){
-  document.querySelectorAll('.pane').forEach(function(p){p.classList.remove('active');});
-  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('on');});
-  document.getElementById('pane-'+n).classList.add('active');
-  document.getElementById('tab-'+n).classList.add('on');
-  if(n==='gallery') renderGallery();
-}
 function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.remove('show');void el.offsetWidth;el.classList.add('show');}
 
 // ============================================================
 // カメラ起動
 // ============================================================
 function startCamera(){
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-    alert('このブラウザはカメラ機能に対応していません');
-    return;
-  }
-  var constraints={
-    video:{
-      facingMode:{ideal:facingMode},
-      width:{ideal:1920},
-      height:{ideal:1080}
-    },
-    audio:false
-  };
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('このブラウザはカメラ機能に対応していません');return;}
+  var constraints={video:{facingMode:{ideal:facingMode},width:{ideal:1920},height:{ideal:1080}},audio:false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(s){
     stream=s;
-    var v=document.getElementById('video');
-    v.srcObject=s;
-    document.getElementById('cam-init').classList.add('hidden');
-    document.getElementById('overlay').style.display='block';
+    document.getElementById('video').srcObject=s;
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('cam-ui').style.display='block';
     requestTiltPermission();
     startAnalyze();
-    toast('カメラを起動しました');
   }).catch(function(err){
     console.error(err);
-    alert('カメラを起動できませんでした：'+err.message+'\n\nHTTPS接続とカメラ許可が必要です');
+    alert('カメラを起動できませんでした：'+err.message);
   });
 }
-
-function switchCamera(){
-  if(stream){stream.getTracks().forEach(function(t){t.stop();});}
-  facingMode=(facingMode==='environment')?'user':'environment';
-  startCamera();
-}
+function switchCamera(){if(stream){stream.getTracks().forEach(function(t){t.stop();});}facingMode=(facingMode==='environment')?'user':'environment';startCamera();}
 
 // ============================================================
-// 端末センサー（傾き）
+// 傾きセンサー
 // ============================================================
 function requestTiltPermission(){
-  // iOS Safari は明示的な許可が必要
   if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission().then(function(r){
-      if(r==='granted') window.addEventListener('deviceorientation',onTilt);
-    }).catch(function(){});
+    DeviceOrientationEvent.requestPermission().then(function(r){if(r==='granted') window.addEventListener('deviceorientation',onTilt);}).catch(function(){});
   } else {
     window.addEventListener('deviceorientation',onTilt);
   }
 }
-
+// 横向き時：beta（前後傾き）が水平基準になる
 function onTilt(e){
-  // gamma: 左右の傾き（端末を左右に傾けた角度）-90〜+90
-  // 縦持ち想定で gamma を「水平からのズレ」として表示
-  if(e.gamma===null) return;
-  currentTilt=Math.round(e.gamma*10)/10;
+  // 横向き持ちの場合、betaが水平方向の傾きを表す
+  if(e.beta===null) return;
+  // -90を0として正規化（横向き時の基準）
+  var t = e.beta - 90;
+  // ±180を超えないように
+  if(t > 90) t = t - 180;
+  if(t < -90) t = t + 180;
+  currentTilt=Math.round(t*10)/10;
   updateTiltUI();
 }
-
 function updateTiltUI(){
   var bar=document.getElementById('level-bar');
   var dot=document.getElementById('dot-tilt');
   var val=document.getElementById('val-tilt');
   var abs=Math.abs(currentTilt);
-  // バーを傾ける（水平になるよう逆方向に回転して表示）
-  bar.style.transform='translateY(-50%) rotate('+(currentTilt)+'deg)';
+  bar.style.transform='rotate('+(currentTilt)+'deg)';
   val.textContent=currentTilt.toFixed(1)+'°';
-  // 判定：±2°以下=OK / ±5°以下=注意 / それ以上=NG
-  bar.classList.remove('warn','bad');
+  bar.classList.remove('ok','locked','bad');
   dot.classList.remove('warn','bad');
-  if(abs>5){bar.classList.add('bad');dot.classList.add('bad');}
-  else if(abs>2){bar.classList.add('warn');dot.classList.add('warn');}
+  if(abs<=1){bar.classList.add('locked');}  // 1°以内＝水平確定（細く長く）
+  else if(abs<=5){bar.classList.add('ok');dot.classList.add('warn');}
+  else{bar.classList.add('bad');dot.classList.add('bad');}
 }
 
 // ============================================================
 // 画像解析（ピンボケ・明るさ）
-// 数百ミリ秒ごとにビデオフレームを縮小Canvasへ転写し、ピクセルを解析
 // ============================================================
-function startAnalyze(){
-  if(analyzeTimer) clearInterval(analyzeTimer);
-  analyzeTimer=setInterval(analyzeFrame,400); // 0.4秒間隔
-}
-
+function startAnalyze(){if(analyzeTimer)clearInterval(analyzeTimer);analyzeTimer=setInterval(analyzeFrame,400);}
 function analyzeFrame(){
   var v=document.getElementById('video');
   if(!v.videoWidth) return;
-  // 解析用の小型canvas（負荷軽減のため200x150程度に縮小）
   var W=200, H=Math.round(200*v.videoHeight/v.videoWidth);
-  var c=document.createElement('canvas');
-  c.width=W; c.height=H;
-  var ctx=c.getContext('2d');
-  ctx.drawImage(v,0,0,W,H);
-  var img=ctx.getImageData(0,0,W,H);
-  var data=img.data;
-
-  // --- 明るさ：全ピクセルの輝度平均 ---
-  var sumLuma=0, n=W*H;
-  // --- グレースケール配列（ピンボケ判定用） ---
-  var gray=new Float32Array(n);
+  var c=document.createElement('canvas'); c.width=W; c.height=H;
+  var ctx=c.getContext('2d'); ctx.drawImage(v,0,0,W,H);
+  var img=ctx.getImageData(0,0,W,H), data=img.data;
+  var sumLuma=0, n=W*H, gray=new Float32Array(n);
   for(var i=0,p=0;i<data.length;i+=4,p++){
-    // 輝度 Y = 0.299R + 0.587G + 0.114B
     var y=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
-    gray[p]=y;
-    sumLuma+=y;
+    gray[p]=y; sumLuma+=y;
   }
-  var avgLuma=sumLuma/n;
-  currentExp=avgLuma;
-
-  // --- ピンボケ：ラプラシアン分散 ---
-  // 隣接ピクセルとの差分（エッジ強度）の分散を計算。値が大きいほど鮮明
-  var lapSum=0, lapSumSq=0, lapCount=0;
+  currentExp=sumLuma/n;
+  var lapSumSq=0, lapSum=0, lapCount=0;
   for(var y2=1;y2<H-1;y2++){
     for(var x=1;x<W-1;x++){
       var idx=y2*W+x;
-      // 4近傍ラプラシアン
       var lap=-4*gray[idx]+gray[idx-1]+gray[idx+1]+gray[idx-W]+gray[idx+W];
-      lapSum+=lap;
-      lapSumSq+=lap*lap;
-      lapCount++;
+      lapSum+=lap; lapSumSq+=lap*lap; lapCount++;
     }
   }
   var lapMean=lapSum/lapCount;
-  var lapVar=lapSumSq/lapCount - lapMean*lapMean;
-  currentBlur=lapVar;
-
+  currentBlur=lapSumSq/lapCount - lapMean*lapMean;
   updateQualityUI();
 }
-
-function updateQualityUI(){
-  // ピンボケ：分散値で判定（経験則的しきい値）
-  var blurState=qualBlur(currentBlur);
-  var expState=qualExp(currentExp);
-  setHud('blur',blurState,(currentBlur<1000?currentBlur.toFixed(0):Math.round(currentBlur)));
-  setHud('exp',expState,Math.round(currentExp));
-  // 警告バナー
-  var warn=document.getElementById('warn');
-  var msgs=[];
-  if(Math.abs(currentTilt)>5) msgs.push('傾き'+currentTilt.toFixed(1)+'°：水平に構え直してください');
-  if(blurState==='bad') msgs.push('ピントが甘い可能性があります');
-  if(expState==='bad') msgs.push(currentExp<60?'暗すぎます':'明るすぎます');
-  if(msgs.length){
-    warn.textContent='⚠ '+msgs.join(' / ');
-    warn.classList.add('show');
-    warn.classList.toggle('amber',msgs.length===1);
-  } else {
-    warn.classList.remove('show');
-  }
-}
-
-// しきい値（PoCの初期値・要現場調整）
-function qualBlur(v){
-  // ラプラシアン分散：大きいほど鮮明。経験的に
-  //   < 50  = ボケている
-  //   50-150 = 注意
-  //   > 150 = OK
-  if(v>150) return 'ok';
-  if(v>50) return 'warn';
-  return 'bad';
-}
-function qualExp(v){
-  // 輝度平均（0-255）
-  //   60-200 = OK
-  //   40-60 or 200-220 = 注意
-  //   それ以外 = NG
-  if(v>=60 && v<=200) return 'ok';
-  if(v>=40 && v<=220) return 'warn';
-  return 'bad';
-}
-function qualTilt(v){
-  var a=Math.abs(v);
-  if(a<=2) return 'ok';
-  if(a<=5) return 'warn';
-  return 'bad';
-}
-
+function qualBlur(v){if(v>150)return'ok';if(v>50)return'warn';return'bad';}
+function qualExp(v){if(v>=60&&v<=200)return'ok';if(v>=40&&v<=220)return'warn';return'bad';}
+function qualTilt(v){var a=Math.abs(v);if(a<=2)return'ok';if(a<=5)return'warn';return'bad';}
 function setHud(key,state,val){
   var dot=document.getElementById('dot-'+key);
-  var v  =document.getElementById('val-'+key);
+  var v=document.getElementById('val-'+key);
   dot.classList.remove('warn','bad');
   if(state==='warn') dot.classList.add('warn');
   else if(state==='bad') dot.classList.add('bad');
   v.textContent=val;
+}
+function updateQualityUI(){
+  var blurState=qualBlur(currentBlur);
+  var expState=qualExp(currentExp);
+  setHud('blur',blurState,(currentBlur<1000?currentBlur.toFixed(0):Math.round(currentBlur)));
+  setHud('exp',expState,Math.round(currentExp));
+  var warn=document.getElementById('warn');
+  var msgs=[];
+  if(Math.abs(currentTilt)>5) msgs.push('傾き'+currentTilt.toFixed(1)+'°');
+  if(blurState==='bad') msgs.push('ピントが甘い');
+  if(expState==='bad') msgs.push(currentExp<60?'暗すぎ':'明るすぎ');
+  if(msgs.length){
+    warn.textContent='⚠ '+msgs.join(' / ');
+    warn.classList.add('show');
+    warn.classList.toggle('amber',msgs.length===1);
+  } else { warn.classList.remove('show'); }
 }
 
 // ============================================================
@@ -407,21 +460,18 @@ function setHud(key,state,val){
 function capture(){
   var v=document.getElementById('video');
   if(!v.videoWidth){toast('カメラ未起動');return;}
-  // フル解像度でキャプチャ
+  // フラッシュ演出
+  var fl=document.getElementById('shot-flash');
+  fl.classList.add('active');
+  setTimeout(function(){fl.classList.remove('active');},80);
   var c=document.getElementById('cv-snap');
   c.width=v.videoWidth; c.height=v.videoHeight;
   c.getContext('2d').drawImage(v,0,0);
   var src=c.toDataURL('image/jpeg',0.92);
-
-  // 撮影時点の品質情報を記録
-  var tiltState=qualTilt(currentTilt);
-  var blurState=qualBlur(currentBlur);
-  var expState =qualExp(currentExp);
-
+  var tiltState=qualTilt(currentTilt), blurState=qualBlur(currentBlur), expState=qualExp(currentExp);
   var rec={
-    id:'p_'+Date.now(),
-    src:src,
-    kubun:'着手前', title:'', location:'', koushu:'', memo:'',  // v10互換フィールド
+    id:'p_'+Date.now(), src:src,
+    kubun:'着手前', title:'', location:'', koushu:'', memo:'',
     _capturedAt:new Date().toLocaleString('ja-JP'),
     _quality:{
       tilt:currentTilt, tiltState:tiltState,
@@ -429,23 +479,16 @@ function capture(){
       exp:Math.round(currentExp), expState:expState
     }
   };
-
-  // 撮り直し推奨判定
   var bads=[];
-  if(tiltState==='bad') bads.push('傾き');
-  if(blurState==='bad') bads.push('ピント');
-  if(expState ==='bad') bads.push('明るさ');
+  if(tiltState==='bad')bads.push('傾き');
+  if(blurState==='bad')bads.push('ピント');
+  if(expState==='bad')bads.push('明るさ');
   if(bads.length){
-    if(!confirm('⚠ 品質に問題があります：'+bads.join('・')+'\n\nそれでも保存しますか？\n（キャンセルで撮り直し）')) return;
+    if(!confirm('⚠ 品質に問題：'+bads.join('・')+'\n保存しますか？（キャンセルで撮り直し）'))return;
   }
-
   dbPut(rec,function(){
     photos.unshift(rec);
-    updateCount();
-    // シャッターフィードバック
-    var s=document.getElementById('shutter');
-    s.style.background='#10b981';
-    setTimeout(function(){s.style.background='#fff';},150);
+    updateThumb();
     toast('撮影しました（'+photos.length+'枚）');
   });
 }
@@ -453,50 +496,58 @@ function capture(){
 // ============================================================
 // ギャラリー
 // ============================================================
+function updateThumb(){
+  var n=photos.length;
+  var badge=document.getElementById('gthumb-badge');
+  var icon=document.getElementById('gthumb-icon');
+  var gt=document.getElementById('gthumb');
+  if(n>0){
+    badge.textContent=n; badge.style.display='block';
+    // 最新写真をサムネに
+    gt.innerHTML='<img src="'+photos[0].src+'"><span class="badge" id="gthumb-badge">'+n+'</span>';
+  } else {
+    icon.style.display='block'; badge.style.display='none';
+  }
+}
+function openGallery(){renderGallery();document.getElementById('gallery-view').classList.add('open');}
+function closeGallery(){document.getElementById('gallery-view').classList.remove('open');}
 function renderGallery(){
   dbAll(function(rows){
     photos=rows.sort(function(a,b){return b.id.localeCompare(a.id);});
-    updateCount();
-    var grid=document.getElementById('gallery-grid');
-    var empty=document.getElementById('gallery-empty');
+    updateThumb();
+    var grid=document.getElementById('gv-grid');
+    var empty=document.getElementById('gv-empty');
     if(!photos.length){grid.innerHTML='';empty.style.display='block';return;}
     empty.style.display='none';
     grid.innerHTML=photos.map(function(p){
-      var q=p._quality||{};
-      var chips='';
+      var q=p._quality||{}, chips='';
       if(q.tiltState) chips+='<span class="qchip '+q.tiltState+'">傾'+(q.tilt||0).toFixed(1)+'°</span>';
       if(q.blurState) chips+='<span class="qchip '+q.blurState+'">ピ</span>';
       if(q.expState)  chips+='<span class="qchip '+q.expState+'">明</span>';
-      return '<div class="gcard">'
-        +'<img class="gcard-img" src="'+p.src+'" onclick="openLB(\''+p.id+'\')">'
-        +'<div class="gcard-body">'
-        +'<div class="gcard-meta">'+(p._capturedAt||'')+'</div>'
-        +'<div class="gcard-q">'+chips+'</div>'
-        +'<div class="gcard-btns">'
+      return '<div class="gv-card">'
+        +'<img class="gv-card-img" src="'+p.src+'" onclick="openLB(\''+p.id+'\')">'
+        +'<div class="gv-card-body">'
+        +'<div class="gv-card-meta">'+(p._capturedAt||'')+'</div>'
+        +'<div class="gv-q">'+chips+'</div>'
+        +'<div class="gv-btns">'
         +'<button class="gbtn dl" onclick="dlPhoto(\''+p.id+'\')">DL</button>'
         +'<button class="gbtn del" onclick="delPhoto(\''+p.id+'\')">削除</button>'
         +'</div></div></div>';
     }).join('');
   });
 }
-function updateCount(){
-  var n=photos.length;
-  document.getElementById('gcnt').textContent=n;
-  var b=document.getElementById('cnt-badge');
-  if(n>0){b.style.display='block';b.textContent=n;}else{b.style.display='none';}
-}
 function openLB(id){var p=photos.find(function(x){return x.id===id;});if(!p)return;document.getElementById('lb-img').src=p.src;document.getElementById('lb').classList.add('open');}
 function closeLB(){document.getElementById('lb').classList.remove('open');}
-function dlPhoto(id){
-  var p=photos.find(function(x){return x.id===id;});if(!p)return;
-  var a=document.createElement('a');
-  a.href=p.src;
-  a.download='kouji_'+id+'.jpg';
-  a.click();
-}
-function delPhoto(id){
-  if(!confirm('削除しますか？'))return;
-  dbDel(id,function(){renderGallery();toast('削除しました');});
+function dlPhoto(id){var p=photos.find(function(x){return x.id===id;});if(!p)return;var a=document.createElement('a');a.href=p.src;a.download='kouji_'+id+'.jpg';a.click();}
+function delPhoto(id){if(!confirm('削除しますか？'))return;dbDel(id,function(){renderGallery();toast('削除しました');});}
+
+// ============================================================
+// Service Worker（PWA）
+// ============================================================
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(err){console.log('SW登録失敗:',err);});
+  });
 }
 
 // ============================================================
@@ -505,7 +556,7 @@ function delPhoto(id){
 openDB(function(){
   dbAll(function(rows){
     photos=rows.sort(function(a,b){return b.id.localeCompare(a.id);});
-    updateCount();
+    updateThumb();
   });
 });
 </script>
