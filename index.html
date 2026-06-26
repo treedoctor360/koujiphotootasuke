@@ -477,7 +477,7 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
       <div id="cam-kb-handle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;cursor:grab;">
         <span style="color:#6ee7b7;font-size:10px;font-weight:bold;letter-spacing:.5px;">⠿ 🪧 電子黒板</span>
         <div style="display:flex;gap:6px;">
-          <button onclick="kokubanAddRow()" style="background:rgba(5,150,105,.6);color:#d1fae5;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;touch-action:manipulation;">＋行追加</button>
+          <button onclick="openKokubanEditor()" style="background:rgba(5,150,105,.6);color:#d1fae5;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;touch-action:manipulation;">✏️ 編集</button>
           <button onclick="toggleKokuban()" style="background:none;border:none;color:#6ee7b7;font-size:14px;cursor:pointer;touch-action:manipulation;">✕</button>
         </div>
       </div>
@@ -1165,7 +1165,7 @@ function camCapture(){
 // 画面上の黒板位置・サイズをvideoとの比率で変換してCanvas座標に投影
 function camDrawKokubanOnCanvas(ctx, cw, ch, video){
   // 入力値を最新に同期
-  kokubanSync();
+  // kokubanSync廃止：KB_ROWSをそのまま使用
   var rows=KB_ROWS.filter(function(r){return r.label||r.value;});
   if(!rows.length) return;
 
@@ -1489,27 +1489,18 @@ function renderKokubanEditor(){
 }
 function kokubanDelRow(i){
   KB_ROWS.splice(i,1);
-  renderKokuban();
+  renderKokuban(); // KB_ROWSを直接削除→再描画（syncなし）
 }
-function kokubanSync(){
-  // inputの現在値をKB_ROWSに同期
-  document.querySelectorAll('.kb-row').forEach(function(row,i){
-    if(!KB_ROWS[i]) return;
-    var lbl=row.querySelector('.kb-lbl');
-    var val=row.querySelector('.kb-val');
-    if(lbl) KB_ROWS[i].label=lbl.value;
-    if(val) KB_ROWS[i].value=val.value;
-  });
-}
+// kokubanSync は廃止（renderKokubanは表示専用、編集はモーダルのみ）
 function renderKokuban(){
-  kokubanSync();
+  // KB_ROWS をそのまま表示に反映する（上書きしない）
   var cont=document.getElementById('cam-kb-rows');
   if(!cont) return;
-  cont.innerHTML=KB_ROWS.map(function(r,i){
-    return '<div class="kb-row" style="display:grid;grid-template-columns:auto 1fr auto;gap:4px;align-items:center;">'
-      +'<input class="kb-lbl" value="'+es(r.label)+'" style="width:70px;background:rgba(0,0,0,.3);border:1px solid rgba(5,150,105,.5);border-radius:4px;color:#d1fae5;font-size:11px;padding:2px 5px;font-family:inherit;">'
-      +'<input class="kb-val" placeholder="入力" value="'+es(r.value)+'" style="background:rgba(0,0,0,.3);border:1px solid rgba(5,150,105,.5);border-radius:4px;color:#fff;font-size:11px;padding:2px 5px;font-family:inherit;">'
-      +'<button onclick="kokubanSync();kokubanDelRow('+i+')" style="background:none;border:none;color:#6ee7b7;font-size:13px;cursor:pointer;padding:0 2px;">✕</button>'
+  var visible=KB_ROWS.filter(function(r){return r.label||r.value;});
+  cont.innerHTML=visible.map(function(r){
+    return '<div style="display:flex;gap:6px;align-items:baseline;line-height:1.6;">'
+      +'<span style="color:#a7f3d0;font-size:10px;flex-shrink:0;min-width:60px;">'+es(r.label)+'</span>'
+      +'<span style="color:#fff;font-size:12px;font-weight:bold;">'+es(r.value||'―')+'</span>'
       +'</div>';
   }).join('');
 }
