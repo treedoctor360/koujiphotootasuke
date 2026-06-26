@@ -469,14 +469,13 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
       <button class="cam-assist-btn" onclick="openKokubanEditor()">✏️ 黒板編集</button>
     </div>
     <div class="cam-right">
-      <button class="cam-side-btn" onclick="openAssist()" title="撮影アシスト">📋</button>
       <button class="cam-shutter" id="cam-shutter" onclick="camCapture()"></button>
       <button class="cam-side-btn" onclick="camSwitch()">🔄</button>
     </div>
     <div id="cam-warn"></div>
     <div id="cam-flash"></div>
     <!-- 電子黒板オーバーレイ（左端デフォルト・ドラッグ移動可） -->
-    <div id="cam-kokuban" style="display:none;position:absolute;top:60px;left:8px;z-index:20;background:rgba(6,78,59,0.88);border:2px solid #059669;border-radius:10px;padding:10px 14px;min-width:220px;max-width:75vw;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);touch-action:none;user-select:none;-webkit-user-select:none;">
+    <div id="cam-kokuban" style="display:none;position:absolute;top:60px;left:8px;z-index:20;background:rgba(6,78,59,0.88);border:2px solid #059669;border-radius:10px;padding:10px 14px;min-width:220px;max-width:75vw;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);user-select:none;-webkit-user-select:none;">
       <!-- ドラッグハンドル -->
       <div id="cam-kb-handle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;cursor:grab;">
         <span style="color:#6ee7b7;font-size:10px;font-weight:bold;letter-spacing:.5px;">⠿ 🪧 電子黒板</span>
@@ -513,7 +512,7 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
 </div>
 
 <!-- ===== 黒板編集モーダル（全画面・縦横共通） ===== -->
-<div id="modal-kokuban-edit" style="position:fixed;inset:0;background:#0f172a;z-index:9000;display:none;flex-direction:column;font-family:inherit;">
+<div id="modal-kokuban-edit" style="position:fixed;inset:0;background:#0f172a;z-index:10000;display:none;flex-direction:column;font-family:inherit;">
   <div style="background:#1e293b;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;flex-shrink:0;">
     <h2 style="color:#fff;font-size:15px;font-weight:bold;">🪧 電子黒板 編集</h2>
     <div style="display:flex;gap:8px;">
@@ -528,21 +527,29 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
   </div>
 </div>
 
-<!-- ===== 撮影位置マップモーダル（⑩） ===== -->
+<!-- ===== 撮影位置マップモーダル（⑩）新設計 ===== -->
 <div class="modal-bg" id="modal-gpsmap">
-  <div class="modal-box" style="max-width:680px;height:85vh;">
-    <div class="modal-hd"><span>🗺️ 撮影位置マップ</span><button onclick="closeM('modal-gpsmap')">✕</button></div>
+  <div class="modal-box" style="max-width:720px;height:90vh;">
+    <div class="modal-hd">
+      <span>🗺️ 撮影位置マップ</span>
+      <button onclick="closeM('modal-gpsmap')">✕</button>
+    </div>
     <div class="modal-body" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
-        <button class="btn btn-blue btn-sm" onclick="gpsGetCurrent()">📍 現在地を取得</button>
-        <button class="btn btn-green btn-sm" onclick="gpsAddToSelected()">📷 選択写真に位置を付与</button>
+      <!-- 上部ツールバー -->
+      <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
+        <button class="btn btn-blue btn-sm" onclick="gpsGetCurrent()">📍 現在地取得</button>
         <button class="btn btn-navy btn-sm" onclick="gpsExportGpx()">⬇ GPX出力</button>
-        <span id="gps-status" style="font-size:10px;color:#64748b;"></span>
+        <span id="gps-status" style="font-size:10px;color:#64748b;flex:1;"></span>
+        <span style="font-size:10px;color:#94a3b8;">ピンをドラッグで位置調整</span>
       </div>
-      <div id="gps-map" style="flex:1;min-height:300px;"></div>
-      <div style="padding:8px 12px;border-top:1px solid #e2e8f0;flex-shrink:0;">
-        <div style="font-size:10px;color:#64748b;margin-bottom:4px;">GPS情報付き写真一覧</div>
-        <div id="gps-photo-list" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+      <!-- 地図 -->
+      <div id="gps-map" style="flex:1;min-height:250px;"></div>
+      <!-- 写真選択リスト -->
+      <div style="border-top:1px solid #e2e8f0;flex-shrink:0;">
+        <div style="padding:6px 12px;font-size:10px;color:#64748b;font-weight:bold;background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+          写真を選択してピンを追加・編集
+        </div>
+        <div id="gps-photo-list" style="display:flex;gap:6px;padding:8px 12px;overflow-x:auto;max-height:130px;"></div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-navy" onclick="closeM('modal-gpsmap')">閉じる</button></div>
@@ -1653,132 +1660,210 @@ function exportZip(){
 }
 
 // ============================================================
-// ⑩ GPS連動撮影位置マップ
+// ⑩ GPS連動撮影位置マップ（改修版）
 // ============================================================
-var GPS_MAP=null, GPS_MARKERS=[], GPS_CURRENT=null;
+var GPS_MAP=null, GPS_MARKERS={}, GPS_CURRENT_MARKER=null;
 var GPS_CURRENT_LAT=null, GPS_CURRENT_LNG=null;
+var GPS_SELECTED_ID=null; // 現在選択中の写真ID
 
-// マップモーダルを開くたびに地図を初期化
+// マップモーダルを開くたびに初期化
 var _origOpenM=openM;
 openM=function(id){
   _origOpenM(id);
-  if(id==='modal-gpsmap') setTimeout(initGpsMap,100);
+  if(id==='modal-gpsmap') setTimeout(initGpsMap,150);
 };
 
 function initGpsMap(){
   if(!GPS_MAP){
-    GPS_MAP=L.map('gps-map').setView([35.0,135.0],13);
+    var defaultLat=35.0, defaultLng=135.0;
+    // GPS付き写真があればその中心に
+    var pts=photoItems.filter(function(p){return p._lat&&p._lng;});
+    if(pts.length){ defaultLat=pts[0]._lat; defaultLng=pts[0]._lng; }
+    GPS_MAP=L.map('gps-map').setView([defaultLat,defaultLng],15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
       attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom:19
     }).addTo(GPS_MAP);
+    // マップクリック：選択中の写真にピンを置く
+    GPS_MAP.on('click',function(e){
+      if(!GPS_SELECTED_ID){toast('下の写真一覧から写真を選んでください');return;}
+      var p=photoItems.find(function(x){return x.id===GPS_SELECTED_ID;});
+      if(!p) return;
+      p._lat=Math.round(e.latlng.lat*1000000)/1000000;
+      p._lng=Math.round(e.latlng.lng*1000000)/1000000;
+      autoSave();
+      renderGpsMarkers();
+      renderGpsPhotoList();
+      toast('No.'+photoItems.indexOf(p)+1+' にピンを設置しました','#059669');
+    });
   }
   GPS_MAP.invalidateSize();
   renderGpsMarkers();
   renderGpsPhotoList();
 }
 
-// 写真のGPS情報をマーカーとして表示
+// 写真マーカーをドラッグ可能で描画
 function renderGpsMarkers(){
   if(!GPS_MAP) return;
-  GPS_MARKERS.forEach(function(m){ GPS_MAP.removeLayer(m); });
-  GPS_MARKERS=[];
+  // 既存マーカーを除去
+  Object.keys(GPS_MARKERS).forEach(function(k){
+    GPS_MAP.removeLayer(GPS_MARKERS[k]);
+  });
+  GPS_MARKERS={};
   var bounds=[];
   photoItems.forEach(function(p,i){
     if(!p._lat||!p._lng) return;
+    var isSel=(p.id===GPS_SELECTED_ID);
+    var col=isSel?'#ef4444':'#2563eb';
     var icon=L.divIcon({
       className:'',
-      html:'<div style="background:#2563eb;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">'+(i+1)+'</div>',
-      iconSize:[24,24], iconAnchor:[12,12]
+      html:'<div style="background:'+col+';color:#fff;border-radius:50%;width:26px;height:26px;'
+        +'display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;'
+        +'border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:grab;">'+(i+1)+'</div>',
+      iconSize:[26,26],iconAnchor:[13,13]
     });
-    var m=L.marker([p._lat,p._lng],{icon:icon});
+    // draggable:true でドラッグ位置調整
+    var m=L.marker([p._lat,p._lng],{icon:icon,draggable:true});
     var thumb=p.src?'<img src="'+p.src+'" style="width:80px;height:60px;object-fit:cover;border-radius:4px;display:block;margin-bottom:4px;">':'';
-    m.bindPopup('<div style="font-size:11px;"><b>No.'+(i+1)+'</b><br>'+thumb+es(p.title||p.koushu||'（タイトルなし）')+'<br><small style="color:#64748b;">'+p._lat.toFixed(6)+', '+p._lng.toFixed(6)+'</small></div>');
+    m.bindPopup(
+      '<div style="font-size:11px;min-width:120px;">'
+      +'<b>No.'+(i+1)+'</b>'+(p.title?' — '+es(p.title):'')+'<br>'
+      +thumb
+      +'<small style="color:#64748b;">'+p._lat.toFixed(6)+', '+p._lng.toFixed(6)+'</small><br>'
+      +'<button onclick="gpsRemovePin('+p.id+')" style="margin-top:4px;padding:2px 8px;background:#dc2626;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;">ピンを削除</button>'
+      +'</div>'
+    );
+    // ドラッグ終了時に座標を更新
+    m.on('dragend',function(ev){
+      var ll=ev.target.getLatLng();
+      p._lat=Math.round(ll.lat*1000000)/1000000;
+      p._lng=Math.round(ll.lng*1000000)/1000000;
+      autoSave();
+      renderGpsPhotoList();
+      toast('位置を更新しました','#059669');
+    });
+    // クリックで選択
+    m.on('click',function(){
+      GPS_SELECTED_ID=p.id;
+      renderGpsMarkers();
+      renderGpsPhotoList();
+    });
     m.addTo(GPS_MAP);
-    GPS_MARKERS.push(m);
+    GPS_MARKERS[p.id]=m;
     bounds.push([p._lat,p._lng]);
   });
-  if(bounds.length) GPS_MAP.fitBounds(bounds,{padding:[30,30]});
+  if(bounds.length&&Object.keys(GPS_MARKERS).length>0){
+    GPS_MAP.fitBounds(bounds,{padding:[30,30],maxZoom:17});
+  }
 }
 
-// GPS写真一覧を下部に表示
+// ピンを削除
+function gpsRemovePin(id){
+  var p=photoItems.find(function(x){return x.id===parseInt(id)||x.id===id;});
+  if(!p) return;
+  delete p._lat; delete p._lng;
+  if(GPS_SELECTED_ID===p.id) GPS_SELECTED_ID=null;
+  autoSave();
+  renderGpsMarkers();
+  renderGpsPhotoList();
+  toast('ピンを削除しました');
+}
+
+// 写真選択リスト（下部）
 function renderGpsPhotoList(){
   var list=document.getElementById('gps-photo-list');
   if(!list) return;
-  var gpsPhotos=photoItems.filter(function(p){return p._lat&&p._lng;});
-  if(!gpsPhotos.length){
-    list.innerHTML='<div style="font-size:11px;color:#94a3b8;padding:8px;">GPS情報付きの写真はありません。カメラタブで撮影すると自動取得されます。</div>';
+  if(!photoItems.length){
+    list.innerHTML='<div style="font-size:11px;color:#94a3b8;padding:8px;">写真がありません</div>';
     return;
   }
-  list.innerHTML=gpsPhotos.map(function(p,i){
-    return '<div style="flex-shrink:0;text-align:center;cursor:pointer;" onclick="GPS_MAP&&GPS_MAP.setView(['+p._lat+','+p._lng+'],17)">'
-      +(p.src?'<img src="'+p.src+'" style="width:60px;height:45px;object-fit:cover;border-radius:4px;display:block;">':'<div style="width:60px;height:45px;background:#f1f5f9;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;">📷</div>')
-      +'<div style="font-size:9px;color:#64748b;margin-top:2px;">'+p._lat.toFixed(4)+'</div>'
+  list.innerHTML=photoItems.map(function(p,i){
+    var hasPt=p._lat&&p._lng;
+    var isSel=(p.id===GPS_SELECTED_ID);
+    var border=isSel?'2px solid #ef4444':hasPt?'2px solid #2563eb':'2px solid #e2e8f0';
+    var bg=isSel?'#fef2f2':hasPt?'#eff6ff':'#f8fafc';
+    return '<div onclick="gpsSelectPhoto('+p.id+')" style="flex-shrink:0;cursor:pointer;border-radius:6px;padding:4px;background:'+bg+';border:'+border+';text-align:center;min-width:64px;">'
+      +(p.src?'<img src="'+p.src+'" style="width:56px;height:42px;object-fit:cover;border-radius:4px;display:block;">':'<div style="width:56px;height:42px;background:#e2e8f0;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:16px;">📷</div>')
+      +'<div style="font-size:9px;font-weight:bold;color:#1e293b;margin-top:2px;">No.'+(i+1)+'</div>'
+      +'<div style="font-size:8px;color:'+(hasPt?'#2563eb':'#94a3b8')+';">'+(hasPt?'📍 あり':'未設定')+'</div>'
       +'</div>';
   }).join('');
+  // 選択中の写真が見えるようにスクロール
+  if(GPS_SELECTED_ID){
+    var idx=photoItems.findIndex(function(p){return p.id===GPS_SELECTED_ID;});
+    if(idx>=0) setTimeout(function(){
+      var cards=list.querySelectorAll('div[onclick]');
+      if(cards[idx]) cards[idx].scrollIntoView({inline:'nearest',block:'nearest'});
+    },50);
+  }
+}
+
+// 写真選択
+function gpsSelectPhoto(id){
+  GPS_SELECTED_ID=(GPS_SELECTED_ID===id)?null:id; // 再タップで解除
+  var p=photoItems.find(function(x){return x.id===id;});
+  // 既にピンがあれば地図をその位置に移動
+  if(p&&p._lat&&p._lng&&GPS_MAP){
+    GPS_MAP.setView([p._lat,p._lng],17);
+    if(GPS_MARKERS[id]) GPS_MARKERS[id].openPopup();
+  }
+  renderGpsMarkers();
+  renderGpsPhotoList();
+  if(!p||!p._lat){
+    var st=document.getElementById('gps-status');
+    if(st) st.textContent=GPS_SELECTED_ID?'地図をタップしてピンを設置してください':'';
+  }
 }
 
 // 現在地取得
 function gpsGetCurrent(){
   var status=document.getElementById('gps-status');
-  if(!navigator.geolocation){status.textContent='位置情報非対応';return;}
-  status.textContent='取得中...';
+  if(!navigator.geolocation){if(status)status.textContent='位置情報非対応';return;}
+  if(status) status.textContent='取得中...';
   navigator.geolocation.getCurrentPosition(
     function(pos){
       GPS_CURRENT_LAT=pos.coords.latitude;
       GPS_CURRENT_LNG=pos.coords.longitude;
-      status.textContent='📍 '+GPS_CURRENT_LAT.toFixed(6)+', '+GPS_CURRENT_LNG.toFixed(6);
+      if(status) status.textContent='📍 '+GPS_CURRENT_LAT.toFixed(5)+', '+GPS_CURRENT_LNG.toFixed(5);
       if(GPS_MAP){
         GPS_MAP.setView([GPS_CURRENT_LAT,GPS_CURRENT_LNG],17);
-        if(GPS_CURRENT) GPS_MAP.removeLayer(GPS_CURRENT);
-        GPS_CURRENT=L.circleMarker([GPS_CURRENT_LAT,GPS_CURRENT_LNG],
+        if(GPS_CURRENT_MARKER) GPS_MAP.removeLayer(GPS_CURRENT_MARKER);
+        GPS_CURRENT_MARKER=L.circleMarker([GPS_CURRENT_LAT,GPS_CURRENT_LNG],
           {radius:8,fillColor:'#ef4444',color:'#fff',weight:2,fillOpacity:.9}).addTo(GPS_MAP);
+        GPS_CURRENT_MARKER.bindPopup('現在地').openPopup();
       }
       toast('現在地を取得しました','#059669');
     },
-    function(err){status.textContent='取得失敗：'+err.message;},
+    function(err){if(status)status.textContent='取得失敗：'+err.message;},
     {enableHighAccuracy:true,timeout:10000}
   );
 }
 
-// 選択写真に現在地を付与（直近追加の写真に付与）
-function gpsAddToSelected(){
-  if(GPS_CURRENT_LAT===null){toast('先に現在地を取得してください');return;}
-  // 最後に追加された写真に位置情報を付与
-  if(!photoItems.length){toast('写真がありません');return;}
-  var last=photoItems[photoItems.length-1];
-  last._lat=GPS_CURRENT_LAT;
-  last._lng=GPS_CURRENT_LNG;
-  autoSave();
-  renderGpsMarkers();
-  renderGpsPhotoList();
-  toast('No.'+photoItems.length+'に位置情報を付与しました','#059669');
-}
-
-// カメラ撮影時にGPS座標を自動取得して写真に付与
+// GPSトラッキング（カメラ起動時）
 var GPS_LAST_LAT=null, GPS_LAST_LNG=null;
 function gpsStartTracking(){
   if(!navigator.geolocation) return;
   navigator.geolocation.watchPosition(function(pos){
     GPS_LAST_LAT=pos.coords.latitude;
     GPS_LAST_LNG=pos.coords.longitude;
-  },{enableHighAccuracy:true,maximumAge:5000});
+  },{enableHighAccuracy:true,maximumAge:3000});
 }
 
-// camCapture に GPS付与を追加
+// camCapture に GPS付与を追加（撮影直後に確認なしで自動付与）
 var _origCamCapture=camCapture;
 camCapture=function(){
   _origCamCapture();
-  // 撮影直後の最新写真にGPS付与
-  if(GPS_LAST_LAT&&photoItems.length){
+  if(GPS_LAST_LAT!==null&&photoItems.length){
     setTimeout(function(){
       var last=photoItems[photoItems.length-1];
-      if(last&&!last._lat){
-        last._lat=GPS_LAST_LAT;
-        last._lng=GPS_LAST_LNG;
+      if(last){
+        last._lat=Math.round(GPS_LAST_LAT*1000000)/1000000;
+        last._lng=Math.round(GPS_LAST_LNG*1000000)/1000000;
         autoSave();
+        // ヒント表示
+        toast('📍 GPS位置を自動付与しました（マップで調整可能）','#0369a1');
       }
-    },500); // addPhotoの非同期保存を待つ
+    },600);
   }
 };
 
@@ -1797,7 +1882,7 @@ function gpsExportGpx(){
   gpx+='</trkseg></trk></gpx>';
   var blob=new Blob([gpx],{type:'application/gpx+xml'});
   var url=URL.createObjectURL(blob);
-  var a=document.createElement('a'); a.href=url;
+  var a=document.createElement('a');a.href=url;
   a.download=(proj.name||'工事写真帳').replace(/[\/:*?"<>|]/g,'_')+'.gpx';
   a.click(); URL.revokeObjectURL(url);
   toast(pts.length+'点のGPXを出力しました','#059669');
