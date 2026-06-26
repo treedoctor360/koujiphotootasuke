@@ -1405,7 +1405,10 @@ function toggleAssistCheck(key,i,el){
 // ============================================================
 // ★ v11.1: 電子黒板オーバーレイ
 // ============================================================
-var KB_ROWS=[]; // {label:'工事名',value:''}の配列
+var KB_ROWS=[];    // [{label:'工事名',value:''}]
+var KB_TMPL='zouen';  // 現在のテンプレート種別
+var KB_MAMAZU='';     // 豆図のbase64画像
+var KB_COMMENT='';    // コメント
 
 function toggleKokuban(){
   var el=document.getElementById('cam-kokuban');
@@ -1486,7 +1489,7 @@ function openKokubanEditor(){
     KB_ROWS.forEach(function(r){ if(r.label==='工事件名'){r.value=projName;found=true;} });
     if(!found) KB_ROWS.unshift({label:'工事件名',value:projName});
   }
-  kokubanApplyTemplate(KB_TMPL);
+  // kokubanApplyTemplate はここでは呼ばない（編集内容がリセットされるため）
   var img=document.getElementById('kb-mamazu-img');
   var ph =document.getElementById('kb-mamazu-placeholder');
   if(img&&ph){
