@@ -6,6 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>工事写真帳 v11</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 /* ===== 基本 ===== */
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -335,6 +338,7 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
     <div class="ctrl-sep"></div>
     <button class="btn btn-amber" onclick="showTab('preview')">👁️ 印刷プレビュー</button>
     <button class="btn btn-out" onclick="openM('modal-settings')">⚙️ 設定</button>
+    <button class="btn btn-blue" onclick="openM('modal-gpsmap')">🗺️ 撮影位置マップ</button>
   </div>
   <!-- ★ v10：圧縮設定パネル -->
   <div id="compress-panel" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:7px 10px;margin-bottom:8px;">
@@ -367,7 +371,7 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
 </div>
 
 <div id="pane-preview" class="pane" style="padding:8px;">
-  <div class="ctrl-bar"><button class="btn btn-out" onclick="showTab('photo')">← 戻る</button><button class="btn btn-amber" onclick="doPrint()">🖨️ 印刷/PDF</button><button class="btn btn-navy" onclick="buildPreview()">🔄 更新</button><span style="font-size:10px;color:#64748b;">※ 印刷：用紙A4・余白最小・倍率100%</span></div>
+  <div class="ctrl-bar"><button class="btn btn-out" onclick="showTab('photo')">← 戻る</button><button class="btn btn-amber" onclick="doPrint()">🖨️ 印刷/PDF</button><button class="btn btn-green" onclick="exportZip()">📦 電子納品ZIP</button><button class="btn btn-navy" onclick="buildPreview()">🔄 更新</button><span style="font-size:10px;color:#64748b;">※ 印刷：用紙A4・余白最小・倍率100%</span></div>
   <div id="preview-content"><div style="text-align:center;padding:40px;color:#94a3b8;font-size:12px;">「更新」を押すとプレビューが表示されます</div></div>
 </div>
 
@@ -521,6 +525,27 @@ header p{font-size:10px;color:#94a3b8;margin-top:1px;}
     <div style="font-size:11px;color:#64748b;margin-bottom:12px;">工事名称欄の内容は自動で「工事名」に反映されます。項目は自由に追加・削除できます。</div>
     <div id="kb-edit-rows" style="display:grid;gap:8px;"></div>
     <button onclick="kokubanEditorAddRow()" style="margin-top:12px;width:100%;padding:10px;background:#1e293b;border:1px dashed #475569;border-radius:8px;color:#94a3b8;font-family:inherit;font-size:13px;cursor:pointer;">＋ 行を追加</button>
+  </div>
+</div>
+
+<!-- ===== 撮影位置マップモーダル（⑩） ===== -->
+<div class="modal-bg" id="modal-gpsmap">
+  <div class="modal-box" style="max-width:680px;height:85vh;">
+    <div class="modal-hd"><span>🗺️ 撮影位置マップ</span><button onclick="closeM('modal-gpsmap')">✕</button></div>
+    <div class="modal-body" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
+        <button class="btn btn-blue btn-sm" onclick="gpsGetCurrent()">📍 現在地を取得</button>
+        <button class="btn btn-green btn-sm" onclick="gpsAddToSelected()">📷 選択写真に位置を付与</button>
+        <button class="btn btn-navy btn-sm" onclick="gpsExportGpx()">⬇ GPX出力</button>
+        <span id="gps-status" style="font-size:10px;color:#64748b;"></span>
+      </div>
+      <div id="gps-map" style="flex:1;min-height:300px;"></div>
+      <div style="padding:8px 12px;border-top:1px solid #e2e8f0;flex-shrink:0;">
+        <div style="font-size:10px;color:#64748b;margin-bottom:4px;">GPS情報付き写真一覧</div>
+        <div id="gps-photo-list" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-navy" onclick="closeM('modal-gpsmap')">閉じる</button></div>
   </div>
 </div>
 
@@ -989,17 +1014,18 @@ function camStart(){
     document.getElementById('cam-ui').style.display='block';
     camRequestTilt();
     camStartAnalyze();
+    gpsStartTracking(); // GPS追跡開始
     camCheckOrient();
     window.addEventListener('orientationchange', camCheckOrient);
     window.addEventListener('resize', camCheckOrient);
     // p-name を黒板に自動転記（初回起動時のみ）
-    if(KB_ROWS.length===0){
-      var defaults=['工事名','工種','撮影区分','撮影場所'];
-      defaults.forEach(function(d){ KB_ROWS.push({label:d,value:''}); });
-    }
+    // 初回起動時：テンプレートでKB_ROWSを初期化
+    if(KB_ROWS.length===0) kokubanApplyTemplate(KB_TMPL);
     var projName=(document.getElementById('p-name')||{}).value||'';
     if(projName){
-      KB_ROWS.forEach(function(r){ if(r.label==='工事名') r.value=projName; });
+      KB_ROWS.forEach(function(r){
+        if(r.label==='工事件名'||r.label==='工事名') r.value=projName;
+      });
     }
   }).catch(function(e){alert('カメラ起動失敗：'+e.message+' / HTTPS接続とカメラ許可が必要です');});
 }
@@ -1516,6 +1542,266 @@ function renderKokuban(){
   }).join('');
 }
 
+
+
+// ============================================================
+// ⑦ 工事写真帳PDF表紙の自動生成
+// buildPrint()の先頭に表紙ページを追加
+// ============================================================
+function buildCoverPage(proj){
+  var d=new Date();
+  var dateStr=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日';
+  return '<div class="preview-page pb-page pb-nobrk" style="height:277mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">'
+    +'<div style="border:3pt solid #1e293b;padding:20mm 15mm;width:90%;max-width:160mm;">'
+    +'<div style="font-size:11pt;color:#64748b;margin-bottom:8mm;letter-spacing:3px;">工 事 写 真 帳</div>'
+    +'<div style="font-size:18pt;font-weight:bold;color:#1e293b;margin-bottom:12mm;line-height:1.4;">'+es(proj.name||'（工事名未入力）')+'</div>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:9pt;text-align:left;">'
+    +'<tr><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;background:#f8fafc;font-weight:bold;width:30%;">工　　期</td><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;">'+es(proj.period||'')+'</td></tr>'
+    +'<tr><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;background:#f8fafc;font-weight:bold;">発 注 者</td><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;">'+es(proj.owner||'')+'</td></tr>'
+    +'<tr><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;background:#f8fafc;font-weight:bold;">施工業者</td><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;">'+es(proj.vendor||'')+'</td></tr>'
+    +'<tr><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;background:#f8fafc;font-weight:bold;">担 当 者</td><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;">'+es(proj.person||'')+'</td></tr>'
+    +'<tr><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;background:#f8fafc;font-weight:bold;">写真枚数</td><td style="padding:3mm 4mm;border:0.5pt solid #cbd5e1;">'+photoItems.length+'枚</td></tr>'
+    +'</table>'
+    +'<div style="margin-top:8mm;font-size:8pt;color:#94a3b8;">作成日：'+dateStr+'</div>'
+    +'</div>'
+    +'</div>';
+}
+
+// buildPrintを表紙付きに拡張
+var _origBuildPrint = buildPrint;
+buildPrint = function(){
+  var proj=getProj();
+  var cover=buildCoverPage(proj);
+  return cover + '<div class="pb-brk"></div>' + _origBuildPrint();
+};
+
+// ============================================================
+// ⑧ 電子納品ZIP生成
+// 国交省電子納品要領：PHOTO フォルダ / ファイル名規則
+// ファイル名：PH_NNNN.jpg（PH+4桁連番）
+// ============================================================
+function exportZip(){
+  if(!photoItems.length){ toast('写真がありません'); return; }
+  if(typeof JSZip === 'undefined'){ toast('JSZipが読み込まれていません（通信が必要です）'); return; }
+  var proj=getProj();
+  var safeProj=(proj.name||'工事写真帳').replace(/[\/:*?"<>|]/g,'_');
+  var zip=new JSZip();
+
+  // PHOTO フォルダ
+  var photoFolder=zip.folder('PHOTO');
+
+  // 写真ファイルを追加（PH_0001.jpg〜）
+  photoItems.forEach(function(p,i){
+    if(!p.src) return;
+    var num=String(i+1).padStart(4,'0');
+    var fname='PH_'+num+'.jpg';
+    // base64のデータ部分のみ抽出
+    var b64=p.src.split(',')[1]||p.src;
+    photoFolder.file(fname, b64, {base64:true});
+  });
+
+  // 写真管理ファイル（PHINFO.csv）
+  var csvRows=['番号,ファイル名,写真区分,工種,タイトル,撮影位置,コメント'];
+  photoItems.forEach(function(p,i){
+    if(!p.src) return;
+    var num=String(i+1).padStart(4,'0');
+    var row=[
+      num,
+      'PH_'+num+'.jpg',
+      '"'+es(p.kubun||'')+'"',
+      '"'+es(p.koushu||'')+'"',
+      '"'+es(p.title||'')+'"',
+      '"'+es(p.location||'')+'"',
+      '"'+es(p.memo||'')+'"',
+    ];
+    csvRows.push(row.join(','));
+  });
+  // BOM付きUTF-8でExcelでも開けるように
+  var csvContent='\uFEFF'+csvRows.join('\r\n');
+  photoFolder.file('PHINFO.csv', csvContent);
+
+  // 表紙HTML（COVER.html）
+  var coverHtml='<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">'
+    +'<title>工事写真帳 表紙</title>'
+    +'<style>body{font-family:Meiryo,sans-serif;display:flex;justify-content:center;padding:20px;}'
+    +'table{border-collapse:collapse;width:500px;}td{padding:8px 12px;border:1px solid #ccc;}'
+    +'.h{background:#f5f5f5;font-weight:bold;width:120px;}</style></head><body>'
+    +'<div><h1 style="text-align:center;font-size:22px;margin-bottom:20px;">工 事 写 真 帳</h1>'
+    +'<h2 style="text-align:center;font-size:16px;margin-bottom:20px;">'+es(proj.name||'')+'</h2>'
+    +'<table><tr><td class="h">工　　期</td><td>'+es(proj.period||'')+'</td></tr>'
+    +'<tr><td class="h">発 注 者</td><td>'+es(proj.owner||'')+'</td></tr>'
+    +'<tr><td class="h">施工業者</td><td>'+es(proj.vendor||'')+'</td></tr>'
+    +'<tr><td class="h">担 当 者</td><td>'+es(proj.person||'')+'</td></tr>'
+    +'<tr><td class="h">写真枚数</td><td>'+photoItems.length+'枚</td></tr>'
+    +'</table></div></body></html>';
+  zip.file('COVER.html', coverHtml);
+
+  // ZIP生成してダウンロード
+  toast('ZIP生成中...','#0369a1');
+  zip.generateAsync({type:'blob'}).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download=safeProj+'_電子納品.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(photoItems.length+'枚をZIPに出力しました','#059669');
+  }).catch(function(err){
+    console.error(err);
+    toast('ZIP生成エラー：'+err.message);
+  });
+}
+
+// ============================================================
+// ⑩ GPS連動撮影位置マップ
+// ============================================================
+var GPS_MAP=null, GPS_MARKERS=[], GPS_CURRENT=null;
+var GPS_CURRENT_LAT=null, GPS_CURRENT_LNG=null;
+
+// マップモーダルを開くたびに地図を初期化
+var _origOpenM=openM;
+openM=function(id){
+  _origOpenM(id);
+  if(id==='modal-gpsmap') setTimeout(initGpsMap,100);
+};
+
+function initGpsMap(){
+  if(!GPS_MAP){
+    GPS_MAP=L.map('gps-map').setView([35.0,135.0],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom:19
+    }).addTo(GPS_MAP);
+  }
+  GPS_MAP.invalidateSize();
+  renderGpsMarkers();
+  renderGpsPhotoList();
+}
+
+// 写真のGPS情報をマーカーとして表示
+function renderGpsMarkers(){
+  if(!GPS_MAP) return;
+  GPS_MARKERS.forEach(function(m){ GPS_MAP.removeLayer(m); });
+  GPS_MARKERS=[];
+  var bounds=[];
+  photoItems.forEach(function(p,i){
+    if(!p._lat||!p._lng) return;
+    var icon=L.divIcon({
+      className:'',
+      html:'<div style="background:#2563eb;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);">'+(i+1)+'</div>',
+      iconSize:[24,24], iconAnchor:[12,12]
+    });
+    var m=L.marker([p._lat,p._lng],{icon:icon});
+    var thumb=p.src?'<img src="'+p.src+'" style="width:80px;height:60px;object-fit:cover;border-radius:4px;display:block;margin-bottom:4px;">':'';
+    m.bindPopup('<div style="font-size:11px;"><b>No.'+(i+1)+'</b><br>'+thumb+es(p.title||p.koushu||'（タイトルなし）')+'<br><small style="color:#64748b;">'+p._lat.toFixed(6)+', '+p._lng.toFixed(6)+'</small></div>');
+    m.addTo(GPS_MAP);
+    GPS_MARKERS.push(m);
+    bounds.push([p._lat,p._lng]);
+  });
+  if(bounds.length) GPS_MAP.fitBounds(bounds,{padding:[30,30]});
+}
+
+// GPS写真一覧を下部に表示
+function renderGpsPhotoList(){
+  var list=document.getElementById('gps-photo-list');
+  if(!list) return;
+  var gpsPhotos=photoItems.filter(function(p){return p._lat&&p._lng;});
+  if(!gpsPhotos.length){
+    list.innerHTML='<div style="font-size:11px;color:#94a3b8;padding:8px;">GPS情報付きの写真はありません。カメラタブで撮影すると自動取得されます。</div>';
+    return;
+  }
+  list.innerHTML=gpsPhotos.map(function(p,i){
+    return '<div style="flex-shrink:0;text-align:center;cursor:pointer;" onclick="GPS_MAP&&GPS_MAP.setView(['+p._lat+','+p._lng+'],17)">'
+      +(p.src?'<img src="'+p.src+'" style="width:60px;height:45px;object-fit:cover;border-radius:4px;display:block;">':'<div style="width:60px;height:45px;background:#f1f5f9;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;">📷</div>')
+      +'<div style="font-size:9px;color:#64748b;margin-top:2px;">'+p._lat.toFixed(4)+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+// 現在地取得
+function gpsGetCurrent(){
+  var status=document.getElementById('gps-status');
+  if(!navigator.geolocation){status.textContent='位置情報非対応';return;}
+  status.textContent='取得中...';
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      GPS_CURRENT_LAT=pos.coords.latitude;
+      GPS_CURRENT_LNG=pos.coords.longitude;
+      status.textContent='📍 '+GPS_CURRENT_LAT.toFixed(6)+', '+GPS_CURRENT_LNG.toFixed(6);
+      if(GPS_MAP){
+        GPS_MAP.setView([GPS_CURRENT_LAT,GPS_CURRENT_LNG],17);
+        if(GPS_CURRENT) GPS_MAP.removeLayer(GPS_CURRENT);
+        GPS_CURRENT=L.circleMarker([GPS_CURRENT_LAT,GPS_CURRENT_LNG],
+          {radius:8,fillColor:'#ef4444',color:'#fff',weight:2,fillOpacity:.9}).addTo(GPS_MAP);
+      }
+      toast('現在地を取得しました','#059669');
+    },
+    function(err){status.textContent='取得失敗：'+err.message;},
+    {enableHighAccuracy:true,timeout:10000}
+  );
+}
+
+// 選択写真に現在地を付与（直近追加の写真に付与）
+function gpsAddToSelected(){
+  if(GPS_CURRENT_LAT===null){toast('先に現在地を取得してください');return;}
+  // 最後に追加された写真に位置情報を付与
+  if(!photoItems.length){toast('写真がありません');return;}
+  var last=photoItems[photoItems.length-1];
+  last._lat=GPS_CURRENT_LAT;
+  last._lng=GPS_CURRENT_LNG;
+  autoSave();
+  renderGpsMarkers();
+  renderGpsPhotoList();
+  toast('No.'+photoItems.length+'に位置情報を付与しました','#059669');
+}
+
+// カメラ撮影時にGPS座標を自動取得して写真に付与
+var GPS_LAST_LAT=null, GPS_LAST_LNG=null;
+function gpsStartTracking(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(function(pos){
+    GPS_LAST_LAT=pos.coords.latitude;
+    GPS_LAST_LNG=pos.coords.longitude;
+  },{enableHighAccuracy:true,maximumAge:5000});
+}
+
+// camCapture に GPS付与を追加
+var _origCamCapture=camCapture;
+camCapture=function(){
+  _origCamCapture();
+  // 撮影直後の最新写真にGPS付与
+  if(GPS_LAST_LAT&&photoItems.length){
+    setTimeout(function(){
+      var last=photoItems[photoItems.length-1];
+      if(last&&!last._lat){
+        last._lat=GPS_LAST_LAT;
+        last._lng=GPS_LAST_LNG;
+        autoSave();
+      }
+    },500); // addPhotoの非同期保存を待つ
+  }
+};
+
+// GPX出力
+function gpsExportGpx(){
+  var pts=photoItems.filter(function(p){return p._lat&&p._lng;});
+  if(!pts.length){toast('GPS情報付き写真がありません');return;}
+  var proj=getProj();
+  var gpx='<?xml version="1.0" encoding="UTF-8"?>'
+    +'<gpx version="1.1" creator="工事写真帳v11" xmlns="http://www.topografix.com/GPX/1/1">'
+    +'<metadata><name>'+es(proj.name||'工事写真帳')+'</name></metadata>'
+    +'<trk><name>'+es(proj.name||'')+'</name><trkseg>';
+  pts.forEach(function(p){
+    gpx+='<trkpt lat="'+p._lat+'" lon="'+p._lng+'"><name>'+es(p.title||p.koushu||'写真')+'</name></trkpt>';
+  });
+  gpx+='</trkseg></trk></gpx>';
+  var blob=new Blob([gpx],{type:'application/gpx+xml'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url;
+  a.download=(proj.name||'工事写真帳').replace(/[\/:*?"<>|]/g,'_')+'.gpx';
+  a.click(); URL.revokeObjectURL(url);
+  toast(pts.length+'点のGPXを出力しました','#059669');
+}
 
 // ============================================================
 // 起動：最新の案件を自動復元
