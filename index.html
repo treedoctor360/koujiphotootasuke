@@ -1429,14 +1429,22 @@ function kokubanAddRow(){
 // 黒板編集モーダル（全画面）
 // ============================================================
 function openKokubanEditor(){
-  // p-name を工事名に自動転記
-  var projName = (document.getElementById('p-name')||{}).value||'';
-  if(projName && KB_ROWS.length>0){
-    // 「工事名」ラベルの行を探して更新、なければ先頭に追加
+  var projName=(document.getElementById('p-name')||{}).value||'';
+  if(KB_ROWS.length===0) kokubanApplyTemplate(KB_TMPL);
+  if(projName){
     var found=false;
-    KB_ROWS.forEach(function(r){ if(r.label==='工事名'){r.value=projName;found=true;} });
-    if(!found) KB_ROWS.unshift({label:'工事名',value:projName});
+    KB_ROWS.forEach(function(r){ if(r.label==='工事件名'){r.value=projName;found=true;} });
+    if(!found) KB_ROWS.unshift({label:'工事件名',value:projName});
   }
+  kokubanApplyTemplate(KB_TMPL);
+  var img=document.getElementById('kb-mamazu-img');
+  var ph =document.getElementById('kb-mamazu-placeholder');
+  if(img&&ph){
+    if(KB_MAMAZU){ img.src=KB_MAMAZU; img.style.display='block'; ph.style.display='none'; }
+    else { img.style.display='none'; ph.style.display='flex'; }
+  }
+  var cm=document.getElementById('kb-comment');
+  if(cm) cm.value=KB_COMMENT||'';
   renderKokubanEditor();
   document.getElementById('modal-kokuban-edit').style.display='flex';
 }
@@ -1444,18 +1452,16 @@ function closeKokubanEditor(){
   document.getElementById('modal-kokuban-edit').style.display='none';
 }
 function kokubanEditorSave(){
-  // エディタの現在値をKB_ROWSに反映
   var rows=document.querySelectorAll('.kb-edit-row');
   KB_ROWS=[];
   rows.forEach(function(row){
     var lbl=row.querySelector('.kbe-lbl');
     var val=row.querySelector('.kbe-val');
-    if(lbl||val) KB_ROWS.push({
-      label:(lbl?lbl.value:''),
-      value:(val?val.value:'')
-    });
+    KB_ROWS.push({label:(lbl?lbl.value:''),value:(val?val.value:'')});
   });
-  // 黒板オーバーレイも更新
+  var cm=document.getElementById('kb-comment');
+  KB_COMMENT=cm?cm.value:'';
+  if(KB_TMPL==='doboku') kokubanCalcDiff();
   renderKokuban();
   closeKokubanEditor();
   toast('黒板を保存しました','#059669');
@@ -1465,11 +1471,11 @@ function kokubanEditorAddRow(){
   if(!cont) return;
   var div=document.createElement('div');
   div.className='kb-edit-row';
-  div.style.cssText='display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center;background:#1e293b;border-radius:8px;padding:10px 12px;border:1px solid #334155;';
+  div.style.cssText='display:grid;grid-template-columns:1fr 2fr auto;gap:6px;align-items:center;background:#1e293b;border-radius:6px;padding:7px 10px;border:1px solid #334155;';
   div.innerHTML=''
-    +'<input class="kbe-lbl" placeholder="項目名" value="" style="background:#0f172a;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:14px;padding:8px 10px;font-family:inherit;width:100%;">'
-    +'<input class="kbe-val" placeholder="内容を入力" value="" style="background:#0f172a;border:1px solid #475569;border-radius:6px;color:#fff;font-size:14px;padding:8px 10px;font-family:inherit;width:100%;">'
-    +'<button onclick="this.closest(\'.kb-edit-row\').remove()" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:6px;padding:6px 10px;font-size:16px;cursor:pointer;flex-shrink:0;">✕</button>';
+    +'<input class="kbe-lbl" placeholder="項目名" value="" style="background:#0f172a;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:13px;padding:6px 8px;font-family:inherit;width:100%;">'
+    +'<input class="kbe-val" placeholder="内容" value="" oninput="kokubanCalcDiff()" style="background:#0f172a;border:1px solid #475569;border-radius:5px;color:#fff;font-size:13px;padding:6px 8px;font-family:inherit;width:100%;">'
+    +'<button onclick="this.closest(\'.kb-edit-row\').remove()" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:5px;padding:5px 8px;font-size:14px;cursor:pointer;flex-shrink:0;">✕</button>';
   cont.appendChild(div);
 }
 function renderKokubanEditor(){
@@ -1479,11 +1485,16 @@ function renderKokubanEditor(){
   KB_ROWS.forEach(function(r){
     var div=document.createElement('div');
     div.className='kb-edit-row';
-    div.style.cssText='display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center;background:#1e293b;border-radius:8px;padding:10px 12px;border:1px solid #334155;';
+    div.style.cssText='display:grid;grid-template-columns:1fr 2fr auto;gap:6px;align-items:center;background:#1e293b;border-radius:6px;padding:7px 10px;border:1px solid #334155;';
+    var isDiff=(r.label==='差'&&KB_TMPL==='doboku');
     div.innerHTML=''
-      +'<input class="kbe-lbl" placeholder="項目名" value="'+es(r.label)+'" style="background:#0f172a;border:1px solid #475569;border-radius:6px;color:#e2e8f0;font-size:14px;padding:8px 10px;font-family:inherit;width:100%;">'
-      +'<input class="kbe-val" placeholder="内容を入力" value="'+es(r.value)+'" style="background:#0f172a;border:1px solid #475569;border-radius:6px;color:#fff;font-size:14px;padding:8px 10px;font-family:inherit;width:100%;">'
-      +'<button onclick="this.closest(\'.kb-edit-row\').remove()" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:6px;padding:6px 10px;font-size:16px;cursor:pointer;flex-shrink:0;">✕</button>';
+      +'<input class="kbe-lbl" placeholder="項目名" value="'+r.label.replace(/"/g,'&quot;')+'" style="background:#0f172a;border:1px solid #475569;border-radius:5px;color:#e2e8f0;font-size:13px;padding:6px 8px;font-family:inherit;width:100%;">'
+      +'<input class="kbe-val" placeholder="内容" value="'+r.value.replace(/"/g,'&quot;')+'" '
+      +(isDiff
+        ? 'readonly style="background:#0c2720;border:1px solid #059669;border-radius:5px;color:#6ee7b7;font-size:13px;padding:6px 8px;font-family:inherit;width:100%;"'
+        : 'oninput="kokubanCalcDiff()" style="background:#0f172a;border:1px solid #475569;border-radius:5px;color:#fff;font-size:13px;padding:6px 8px;font-family:inherit;width:100%;"')
+      +'>'
+      +'<button onclick="this.closest(\'.kb-edit-row\').remove()" style="background:#7f1d1d;border:none;color:#fca5a5;border-radius:5px;padding:5px 8px;font-size:14px;cursor:pointer;flex-shrink:0;">✕</button>';
     cont.appendChild(div);
   });
 }
