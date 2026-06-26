@@ -1032,9 +1032,13 @@ function camStart(){
     camCheckOrient();
     window.addEventListener('orientationchange', camCheckOrient);
     window.addEventListener('resize', camCheckOrient);
-    // p-name を黒板に自動転記（初回起動時のみ）
-    // 初回起動時：テンプレートでKB_ROWSを初期化
-    if(KB_ROWS.length===0) kokubanApplyTemplate(KB_TMPL);
+    // 初回起動時：KB_ROWSが空ならデフォルト項目をセット
+    if(KB_ROWS.length===0){
+      ['工事件名','工種','撮影区分','撮影場所'].forEach(function(d){
+        KB_ROWS.push({label:d,value:''});
+      });
+    }
+    // p-name を工事件名に自動転記
     var projName=(document.getElementById('p-name')||{}).value||'';
     if(projName){
       KB_ROWS.forEach(function(r){
@@ -1483,13 +1487,17 @@ function kokubanAddRow(){
 // ============================================================
 function openKokubanEditor(){
   var projName=(document.getElementById('p-name')||{}).value||'';
-  if(KB_ROWS.length===0) kokubanApplyTemplate(KB_TMPL);
+  if(KB_ROWS.length===0){
+    ['工事件名','工種','撮影区分','撮影場所'].forEach(function(d){
+      KB_ROWS.push({label:d,value:''});
+    });
+  }
   if(projName){
     var found=false;
     KB_ROWS.forEach(function(r){ if(r.label==='工事件名'){r.value=projName;found=true;} });
     if(!found) KB_ROWS.unshift({label:'工事件名',value:projName});
   }
-  // kokubanApplyTemplate はここでは呼ばない（編集内容がリセットされるため）
+
   var img=document.getElementById('kb-mamazu-img');
   var ph =document.getElementById('kb-mamazu-placeholder');
   if(img&&ph){
